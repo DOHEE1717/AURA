@@ -9,13 +9,13 @@
 #include "Card/DA_CardDefinition.h"
 
 
-#include "GameInstance_Aura.generated.h"
+#include "AuraGameInstance.generated.h"
 
 /**
  * 
  */
 UCLASS()
-class AURA_API UGameInstance_Aura : public UGameInstance
+class AURA_API UAruaGameInstance : public UGameInstance
 {
 	GENERATED_BODY()
 	

@@ -11,7 +11,6 @@ class UInputMappingContext;
 class UInputAction;
 class UStaticMeshComponent;
 struct FInputActionValue;
-class UAbilitySystemComponent;
 
 UCLASS()
 class AURA_API APlayerCharacter : public ABaseCharacter
@@ -53,12 +52,6 @@ protected:
 	
 public:
 	virtual void Tick(float DeltaTime) override;
-	
-public:
-	UAbilitySystemComponent* GetASC() const;
-	
-	UFUNCTION(BlueprintCallable, Category="GAS")
-	UAbilitySystemComponent* GetASC_BP() const;
 	
 
 	

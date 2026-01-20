@@ -11,10 +11,6 @@
 #include "EnhancedInputComponent.h"
 #include "EnhancedInputSubsystems.h"
 #include "InputActionValue.h"
-#include "AbilitySystemComponent.h"
-#include "AbilitySystemInterface.h"
-#include "GameFramework/PlayerState.h"
-
 
 APlayerCharacter::APlayerCharacter()
 {
@@ -188,26 +184,4 @@ void APlayerCharacter::InputZoomPressed(const FInputActionValue& Value)
 void APlayerCharacter::InputZoomReleased(const FInputActionValue& Value)
 {
 	
-}
-
-UAbilitySystemComponent* APlayerCharacter::GetASC() const
-{
-	APlayerState* PS=GetPlayerState();
-	if (!PS)
-	{
-		return nullptr;
-	}
-	
-	if (IAbilitySystemInterface* ASI=Cast<IAbilitySystemInterface>(PS))
-	{
-		return ASI->GetAbilitySystemComponent();
-	}
-	
-	return nullptr;
-	
-}
-
-UAbilitySystemComponent* APlayerCharacter::GetASC_BP()const
-{
-	return GetASC();
 }

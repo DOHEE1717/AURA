@@ -1,14 +1,14 @@
 // Fill out your copyright notice in the Description page of Project Settings.
 
 
-#include "GameBase/GameInstance_Aura.h"
+#include "GameBase/AuraGameInstance.h"
 
-void UGameInstance_Aura::Init()
+void UAruaGameInstance::Init()
 {
 	Super::Init();
 }
 
-void UGameInstance_Aura::BuildCardRegistry()
+void UAruaGameInstance::BuildCardRegistry()
 {
 	CardRegistry.Reset();
 	

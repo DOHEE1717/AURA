@@ -7,9 +7,8 @@
 #include "CardAbility_Fireball.generated.h"
 
 class AFireballProjectile;
-/**
- * 
- */
+
+
 UCLASS()
 class AURA_API UCardAbility_Fireball : public UGameplayAbility
 {
@@ -29,4 +28,9 @@ protected:
 	// 스폰 위치 오프셋(앞/위로 조금)
 	UPROPERTY(EditDefaultsOnly, Category="CardAbility|Fireball")
 	FVector SpawnOffset = FVector(150.f, 0.f, 50.f);
+	
+	//발사 속도
+	UPROPERTY(EditDefaultsOnly, Category="CardAbility|Fireball")
+	float FireballSpeed=2000.f;
+	
 };

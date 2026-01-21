@@ -9,12 +9,15 @@
  */
 class UInputMappingContext;
 class UInputAction;
+class UGameplayAbility;
 struct FInputActionValue;
 
 UCLASS()
 class AURA_API AAuraPlayerController: public APlayerController
 {
 	GENERATED_BODY()
+	
+	
 	
 public:
 	AAuraPlayerController();
@@ -44,6 +47,15 @@ private:
 	
 	UPROPERTY(VisibleAnywhere, Category="Card")
 	int32 SelectedIndex = 0; // 0~2
+	
+	// ===== Test Slot System (0~2) =====
+	UPROPERTY(EditDefaultsOnly, Category="Card|Test")
+	TArray<TSubclassOf<UGameplayAbility>> TestSlotAbilities; // size=3로 쓸 것
+	
+
+	// 인덱스 1에 꽂을 Fireball (에디터에서 지정 가능하게)
+	UPROPERTY(EditDefaultsOnly, Category="Card|Test")
+	TSubclassOf<UGameplayAbility> FireballAbilityClass;
 	
 private:
 	//연결함수

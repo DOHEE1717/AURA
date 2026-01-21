@@ -6,7 +6,59 @@
 #include "EnhancedInputSubsystems.h"
 #include "Engine/Engine.h"
 #include "InputActionValue.h"
+#include "AbilitySystemComponent.h"
+#include "AbilitySystemInterface.h"
+#include "GameFramework/PlayerState.h"
+#include "Abilities/GameplayAbility.h"
+#include "GameplayAbilitySpec.h"
+#include "GameBase/AuraPlayerState.h"
 #include "GameFramework/PlayerController.h"
+
+
+static UAbilitySystemComponent* GetASC_Safe(APlayerController* PC)
+{
+	if (!PC) return nullptr;
+
+	// PlayerState 우선 (너희 구조: ASC in PlayerState)
+	if (APlayerState* PS = PC->GetPlayerState<APlayerState>())
+	{
+		// (A) 컴포넌트로 붙어있는 경우
+		if (UAbilitySystemComponent* ASC = PS->FindComponentByClass<UAbilitySystemComponent>())
+		{
+			return ASC;
+		}
+
+		// (B) AbilitySystemInterface 구현한 경우
+		if (IAbilitySystemInterface* ASI = Cast<IAbilitySystemInterface>(PS))
+		{
+			return ASI->GetAbilitySystemComponent();
+		}
+	}
+
+	// 2) Pawn 쪽도 혹시 대비
+	if (APawn* Pawn = PC->GetPawn())
+	{
+		if (UAbilitySystemComponent* ASC = Pawn->FindComponentByClass<UAbilitySystemComponent>())
+		{
+			return ASC;
+		}
+
+		if (IAbilitySystemInterface* ASI = Cast<IAbilitySystemInterface>(Pawn))
+		{
+			return ASI->GetAbilitySystemComponent();
+		}
+	}
+
+	return nullptr;
+}
+
+
+
+
+
+
+
+
 
 AAuraPlayerController::AAuraPlayerController()
 {
@@ -15,6 +67,73 @@ AAuraPlayerController::AAuraPlayerController()
 void AAuraPlayerController::BeginPlay()
 {
 	Super::BeginPlay();
+	
+	// ===== TestSlot 초기화: 3칸 보장 + 인덱스 1에 Fireball 꽂기 =====
+	TestSlotAbilities.SetNum(3);
+	TestSlotAbilities[1] = FireballAbilityClass;
+
+	UE_LOG(LogTemp, Warning, TEXT("[CardTest] SlotInit: [0]=%s [1]=%s [2]=%s"),
+		*GetNameSafe(TestSlotAbilities[0].Get()),
+		*GetNameSafe(TestSlotAbilities[1].Get()),
+		*GetNameSafe(TestSlotAbilities[2].Get()));
+	
+	// ===== Step3: 테스트용 GiveAbility (Fireball) + ActorInfo 초기화 =====
+	if (AAuraPlayerState* APS = GetPlayerState<AAuraPlayerState>())
+	{
+		if (UAbilitySystemComponent* ASC = APS->GetASC())
+		{
+			// (중요) Owner=PlayerState, Avatar=Pawn 구조 초기화
+			// 이미 다른 곳에서 InitAbilityActorInfo를 확실히 하고 있어도, 이건 테스트 단계에선 안전하게 넣어도 됨
+			ASC->InitAbilityActorInfo(APS, GetPawn());
+
+			// 서버 권한에서만 GiveAbility (싱글/리슨서버 포함)
+			if (ASC->GetOwnerRole() == ROLE_Authority)
+			{
+				if (FireballAbilityClass)
+				{
+					// 중복 지급 방지
+					bool bAlreadyHas = false;
+					for (const FGameplayAbilitySpec& Spec : ASC->GetActivatableAbilities())
+					{
+						if (Spec.Ability && Spec.Ability->GetClass() == FireballAbilityClass.Get())
+						{
+							bAlreadyHas = true;
+							break;
+						}
+					}
+
+					if (!bAlreadyHas)
+					{
+						FGameplayAbilitySpec Spec(FireballAbilityClass, 1, 0);
+						ASC->GiveAbility(Spec);
+
+						UE_LOG(LogTemp, Warning, TEXT("[CardTest] GiveAbility Fireball OK: %s"),
+							*GetNameSafe(FireballAbilityClass.Get()));
+					}
+					else
+					{
+						UE_LOG(LogTemp, Warning, TEXT("[CardTest] Fireball already granted"));
+					}
+				}
+				else
+				{
+					UE_LOG(LogTemp, Warning, TEXT("[CardTest] FireballAbilityClass=None (cannot GiveAbility)"));
+				}
+			}
+			else
+			{
+				UE_LOG(LogTemp, Warning, TEXT("[CardTest] Not Authority - skipping GiveAbility"));
+			}
+		}
+		else
+		{
+			UE_LOG(LogTemp, Warning, TEXT("[CardTest] APS->GetASC() returned null"));
+		}
+	}
+	else
+	{
+		UE_LOG(LogTemp, Warning, TEXT("[CardTest] PlayerState is not AAuraPlayerState (check GameMode PlayerStateClass)"));
+	}
 	
 	//우클릭 할당 해제
 	bShowMouseCursor = false;
@@ -96,6 +215,27 @@ void AAuraPlayerController::OnCardLMB()
 			FColor::Yellow,
 			FString::Printf(TEXT("[CardInput] LMB | Sel=%d"), SelectedIndex));
 	}
+
+	// ===== Step2: 슬롯 Ability 실행 =====
+	if (!TestSlotAbilities.IsValidIndex(SelectedIndex) || !TestSlotAbilities[SelectedIndex])
+	{
+		UE_LOG(LogTemp, Warning, TEXT("[CardTest] Slot %d is empty"), SelectedIndex);
+		return;
+	}
+
+	UAbilitySystemComponent* ASC = GetASC_Safe(this);
+	if (!ASC)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("[CardTest] ASC is null (PlayerState/Pawn 모두 실패)"));
+		return;
+	}
+
+	TSubclassOf<UGameplayAbility> AbilityClass = TestSlotAbilities[SelectedIndex];
+	const bool bActivated = ASC->TryActivateAbilityByClass(AbilityClass);
+
+	UE_LOG(LogTemp, Warning, TEXT("[CardTest] TryActivateAbilityByClass(%s) -> %s"),
+		*GetNameSafe(AbilityClass.Get()),
+		bActivated ? TEXT("TRUE") : TEXT("FALSE"));
 }
 
 void AAuraPlayerController::OnCardRMB()

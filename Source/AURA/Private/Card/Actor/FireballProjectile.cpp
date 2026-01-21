@@ -1,27 +1,45 @@
 // Fill out your copyright notice in the Description page of Project Settings.
 
-
 #include "Card/Actor/FireballProjectile.h"
 
-// Sets default values
+#include "Components/SphereComponent.h"
+#include "GameFramework/ProjectileMovementComponent.h"
+
 AFireballProjectile::AFireballProjectile()
 {
- 	// Set this actor to call Tick() every frame.  You can turn this off to improve performance if you don't need it.
-	PrimaryActorTick.bCanEverTick = true;
+	PrimaryActorTick.bCanEverTick = false;
 
+	Collision = CreateDefaultSubobject<USphereComponent>(TEXT("Collision"));
+	SetRootComponent(Collision);
+
+	Collision->InitSphereRadius(12.5f);
+	Collision->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
+	Collision->SetCollisionObjectType(ECC_WorldDynamic);
+	Collision->SetCollisionResponseToAllChannels(ECR_Block);
+	Collision->SetCollisionResponseToChannel(ECC_Pawn, ECR_Overlap);
+
+	ProjectileMovement = CreateDefaultSubobject<UProjectileMovementComponent>(TEXT("ProjectileMovement"));
+	ProjectileMovement->UpdatedComponent = Collision;
+	ProjectileMovement->InitialSpeed = 2000.f;
+	ProjectileMovement->MaxSpeed = 2000.f;
+	ProjectileMovement->bRotationFollowsVelocity = true;
+	ProjectileMovement->ProjectileGravityScale = 0.f;
+	ProjectileMovement->bShouldBounce = false;
+
+	InitialLifeSpan = 3.0f;
 }
 
-// Called when the game starts or when spawned
 void AFireballProjectile::BeginPlay()
 {
 	Super::BeginPlay();
-	
 }
 
-// Called every frame
-void AFireballProjectile::Tick(float DeltaTime)
+void AFireballProjectile::FireInDirection(const FVector& Direction, float Speed)
 {
-	Super::Tick(DeltaTime);
+	if (!ProjectileMovement) return;
 
+	const FVector Dir = Direction.GetSafeNormal();
+	ProjectileMovement->InitialSpeed = Speed;
+	ProjectileMovement->MaxSpeed = Speed;
+	ProjectileMovement->Velocity = Dir * Speed;
 }
-

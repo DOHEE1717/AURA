@@ -6,21 +6,28 @@
 #include "GameFramework/Actor.h"
 #include "FireballProjectile.generated.h"
 
+class USphereComponent;
+class UProjectileMovementComponent;
+
 UCLASS()
 class AURA_API AFireballProjectile : public AActor
 {
 	GENERATED_BODY()
-	
-public:	
-	// Sets default values for this actor's properties
+
+public:
 	AFireballProjectile();
 
+	// Ability에서 호출: 방향/속도 세팅
+	UFUNCTION(BlueprintCallable, Category="Projectile")
+	void FireInDirection(const FVector& Direction, float Speed);
+
 protected:
-	// Called when the game starts or when spawned
 	virtual void BeginPlay() override;
 
-public:	
-	// Called every frame
-	virtual void Tick(float DeltaTime) override;
+protected:
+	UPROPERTY(VisibleAnywhere, Category="Components")
+	USphereComponent* Collision;
 
+	UPROPERTY(VisibleAnywhere, Category="Components")
+	UProjectileMovementComponent* ProjectileMovement;
 };

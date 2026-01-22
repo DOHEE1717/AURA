@@ -21,13 +21,31 @@ APlayerCharacter::APlayerCharacter()
 	GetMesh()->SetRelativeRotation(FRotator(0.f, -90.f, 0.f));
 	GetMesh()->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 	
-	static ConstructorHelpers::FObjectFinder<UStaticMesh> PlayerCharacterMeshAsset(TEXT(""));
+	//화면에서 바디 숨기고, 그림자만 생성
+	GetMesh()->SetOwnerNoSee(true);
+	GetMesh()->SetCastHiddenShadow(true);
+		
 	
 	//1인칭 카메라 생성
 	FirstPersonCamera=CreateDefaultSubobject<UCameraComponent>(TEXT("FirstPersonCamera"));
 	FirstPersonCamera->SetupAttachment(GetCapsuleComponent());
 	FirstPersonCamera->SetRelativeLocation(FVector(0.0f, 0.0f, 64.0f));
 	FirstPersonCamera->bUsePawnControlRotation=true;
+	
+	// 1인칭 팔 메시 생성 
+	FirstPersonArmsMesh = CreateDefaultSubobject<USkeletalMeshComponent>(TEXT("FirstPersonArmsMesh"));
+	FirstPersonArmsMesh->SetupAttachment(FirstPersonCamera);
+
+	// 충돌은 비활성화
+	FirstPersonArmsMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+
+	// 팔은 1인칭에서만 보이게
+	FirstPersonArmsMesh->SetOnlyOwnerSee(true);
+	FirstPersonArmsMesh->bOwnerNoSee = false;
+
+	// 팔 그림자 비활성화
+	FirstPersonArmsMesh->CastShadow = false;
+	FirstPersonArmsMesh->bCastDynamicShadow = false;
 	
 	//컨트롤러 회전사용 
 	bUseControllerRotationPitch=true;
@@ -61,7 +79,17 @@ void APlayerCharacter::BeginPlay()
 		}
 	}
 	
+	ApplyArmsHiddenBones();
 		
+	GetMesh()->SetVisibility(false, true);
+	GetMesh()->SetHiddenInGame(true, true);
+	
+	// 팔 오프셋 적용(카메라 기준)
+	if (FirstPersonArmsMesh)
+	{
+		FirstPersonArmsMesh->SetRelativeLocation(ArmsRelativeLocation);
+		FirstPersonArmsMesh->SetRelativeRotation(ArmsRelativeRotation);
+	}
 }
 
 void APlayerCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputComponent)
@@ -183,5 +211,36 @@ void APlayerCharacter::InputZoomPressed(const FInputActionValue& Value)
 
 void APlayerCharacter::InputZoomReleased(const FInputActionValue& Value)
 {
+	
+}
+
+void APlayerCharacter::ApplyArmsHiddenBones()
+{
+	if (!FirstPersonArmsMesh) return;
+	
+	if (ArmsHiddenBones.Num() == 0)
+	{
+		
+		ArmsHiddenBones = {
+			// === 머리/목 체인 ===
+			TEXT("neck_01"),
+			
+			// === 하체 체인 (좌) ===
+			TEXT("thigh_l"),
+			
+			// === 하체 체인 (우) ===
+			TEXT("thigh_r")
+			
+		};
+	}
+	
+	// 숨김 적용
+	for (const FName& BoneName : ArmsHiddenBones)
+	{
+		if (BoneName.IsNone()) continue;
+
+		// 물리 바디 처리는 건드리지 않음(PBO_None)
+		FirstPersonArmsMesh->HideBoneByName(BoneName, EPhysBodyOp::PBO_None);
+	}
 	
 }

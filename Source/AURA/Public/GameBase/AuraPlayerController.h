@@ -48,14 +48,15 @@ private:
 	UPROPERTY(VisibleAnywhere, Category="Card")
 	int32 SelectedIndex = 0; // 0~2
 	
-	// ===== Test Slot System (0~2) =====
-	UPROPERTY(EditDefaultsOnly, Category="Card|Test")
-	TArray<TSubclassOf<UGameplayAbility>> TestSlotAbilities; // size=3로 쓸 것
+	// LMB
+	UPROPERTY(EditDefaultsOnly, Category="Card|AbilityMap")
+	TMap<FName, TSubclassOf<UGameplayAbility>> PrimaryAbilityMap;
+
+	// RMB
+	UPROPERTY(EditDefaultsOnly, Category="Card|AbilityMap")
+	TMap<FName, TSubclassOf<UGameplayAbility>> AltAbilityMap;
 	
 
-	// 인덱스 1에 꽂을 Fireball (에디터에서 지정 가능하게)
-	UPROPERTY(EditDefaultsOnly, Category="Card|Test")
-	TSubclassOf<UGameplayAbility> FireballAbilityClass;
 	
 private:
 	//연결함수
@@ -64,6 +65,7 @@ private:
 	void OnCardSelect(const FInputActionValue& Value);
 	void SelectNext(); //>다음 카드
 	void SelectPrev(); //<이전 카드
-	
+	void TryUseSelectedSlotCard(bool bAltClick);
+		
 	
 };

@@ -3,6 +3,7 @@
 
 #include "GameBase/AuraPlayerState.h"
 #include "AbilitySystemComponent.h"
+#include "Card/AuraCombatCardComponent.h"
 
 
 
@@ -13,6 +14,9 @@ AAuraPlayerState::AAuraPlayerState()
 	AbilitySystemComponent=CreateDefaultSubobject<UAbilitySystemComponent>(TEXT("AbilitySystemComponent"));
 	
 	AbilitySystemComponent->SetReplicationMode(EGameplayEffectReplicationMode::Mixed);
+	
+	//CardCombatComponent 추가
+	CombatCardComponent=CreateDefaultSubobject<UAuraCombatCardComponent>(TEXT("CombatCardComponent"));
 	
 }
 

@@ -3,12 +3,12 @@
 
 #include "GameBase/AuraGameInstance.h"
 
-void UAruaGameInstance::Init()
+void UAuraGameInstance::Init()
 {
 	Super::Init();
 }
 
-void UAruaGameInstance::BuildCardRegistry()
+void UAuraGameInstance::BuildCardRegistry()
 {
 	CardRegistry.Reset();
 	

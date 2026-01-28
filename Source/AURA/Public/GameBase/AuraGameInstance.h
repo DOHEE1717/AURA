@@ -15,7 +15,7 @@
  * 
  */
 UCLASS()
-class AURA_API UAruaGameInstance : public UGameInstance
+class AURA_API UAuraGameInstance : public UGameInstance
 {
 	GENERATED_BODY()
 	

@@ -9,7 +9,7 @@
  */
 class UInputMappingContext;
 class UInputAction;
-class UGameplayAbility;
+class UAuraCombatCardComponent;
 struct FInputActionValue;
 
 UCLASS()
@@ -48,14 +48,7 @@ private:
 	UPROPERTY(VisibleAnywhere, Category="Card")
 	int32 SelectedIndex = 0; // 0~2
 	
-	// LMB
-	UPROPERTY(EditDefaultsOnly, Category="Card|AbilityMap")
-	TMap<FName, TSubclassOf<UGameplayAbility>> PrimaryAbilityMap;
-
-	// RMB
-	UPROPERTY(EditDefaultsOnly, Category="Card|AbilityMap")
-	TMap<FName, TSubclassOf<UGameplayAbility>> AltAbilityMap;
-	
+		
 
 	
 private:

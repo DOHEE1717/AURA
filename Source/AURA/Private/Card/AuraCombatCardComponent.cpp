@@ -1,4 +1,8 @@
 #include "Card/AuraCombatCardComponent.h"
+#include "Card/DA_AuraCardAbilityMapping.h"
+#include "AbilitySystemInterface.h"
+#include "AbilitySystemComponent.h"
+#include "GameFramework/PlayerState.h"
 #include "Card/DA_CardDefinition.h"
 #include "Engine/World.h"
 #include "Engine/GameInstance.h"
@@ -12,9 +16,124 @@ UAuraCombatCardComponent::UAuraCombatCardComponent()
 	PrimaryComponentTick.bCanEverTick = true;
 }
 
+bool UAuraCombatCardComponent::UseSlotCard(int32 SlotIndex, ECardUseInput InputType)
+{
+	// 0) 슬롯 유효성
+	if (!Slots.IsValidIndex(SlotIndex))
+	{
+		UE_LOG(LogTemp, Warning, TEXT("[CombatCard] UseSlotCard invalid SlotIndex=%d"), SlotIndex);
+		return false;
+	}
+
+	const FName CardID = Slots[SlotIndex];
+	if (CardID.IsNone())
+	{
+		UE_LOG(LogTemp, Warning, TEXT("[CombatCard] UseSlotCard slot is empty. SlotIndex=%d"), SlotIndex);
+		return false;
+	}
+
+	// 1) 매핑 에셋 확인
+	if (!AbilityMappingAsset)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("[CombatCard] AbilityMappingAsset is null. Set DA_CardAbilityMapping_Default on component."));
+		return false;
+	}
+
+	// 2) 매핑 조회
+	FCardAbilityPair Pair;
+	if (!AbilityMappingAsset->GetAbilityPair(CardID, Pair))
+	{
+		UE_LOG(LogTemp, Warning, TEXT("[CombatCard] AbilityPair not found for CardID=%s"), *CardID.ToString());
+		return false;
+	}
+
+	TSubclassOf<UGameplayAbility> AbilityClass =
+		(InputType == ECardUseInput::Primary) ? Pair.PrimaryAbility : Pair.AltAbility;
+
+	if (!AbilityClass)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("[CombatCard] AbilityClass is null. CardID=%s Input=%s"),
+			*CardID.ToString(),
+			(InputType == ECardUseInput::Primary) ? TEXT("Primary") : TEXT("Alt"));
+		return false;
+	}
+
+	// 3) ASC 얻기
+	UAbilitySystemComponent* ASC = GetOwnerASC();
+	if (!ASC)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("[CombatCard] ASC is null. (Owner must implement IAbilitySystemInterface or provide ASC)"));
+		return false;
+	}
+
+	// 4) Ability 실행
+	const bool bActivated = ASC->TryActivateAbilityByClass(AbilityClass);
+	if (!bActivated)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("[CombatCard] TryActivateAbilityByClass failed. Ability=%s CardID=%s"),
+			*AbilityClass->GetName(),
+			*CardID.ToString());
+		return false;
+	}
+
+	// 5) 실행 성공 후에만 카드 소비/재생산 처리
+	//    (TryConsumeSlot 내부에서 Queue/ReproTable 처리까지 이미 하고 있는 구조를 활용)
+	FName ConsumedCardID = NAME_None;
+	const bool bConsumed = TryConsumeSlot(SlotIndex, ConsumedCardID);
+
+	if (!bConsumed)
+	{
+		// Ability는 이미 발동된 상태라 여기서 false를 반환하면 UX가 애매해짐.
+		// 우선 true 반환 + 경고 로그로 처리.
+		UE_LOG(LogTemp, Warning, TEXT("[CombatCard] Ability activated but TryConsumeSlot failed. SlotIndex=%d CardID=%s"),
+			SlotIndex, *CardID.ToString());
+		return true;
+	}
+
+	// 안전 체크: 소비된 카드가 기대한 카드인지
+	if (ConsumedCardID != CardID)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("[CombatCard] ConsumedCardID mismatch. Expected=%s Actual=%s"),
+			*CardID.ToString(), *ConsumedCardID.ToString());
+	}
+
+	if (bDebugPrint)
+	{
+		UE_LOG(LogTemp, Log, TEXT("[CombatCard] UseSlotCard OK. CardID=%s Input=%s"),
+			*CardID.ToString(),
+			(InputType == ECardUseInput::Primary) ? TEXT("Primary") : TEXT("Alt"));
+		DebugDumpState(TEXT("UseSlotCard"));
+	}
+
+	return true;
+}
+
 void UAuraCombatCardComponent::BeginPlay()
 {
 	Super::BeginPlay();
+	
+	// ===== DEBUG: Slot[0] force Card_GravityField =====
+	{
+		const FName ForceCardID(TEXT("Card_GravityField"));
+
+		// Slots 배열 크기 보장
+		if (Slots.Num() < MaxSlots)
+		{
+			Slots.SetNum(MaxSlots);
+		}
+
+		Slots[0] = ForceCardID;
+
+		// 재생산 테이블에 있으면 제거(= "지금은 사용 가능" 상태로 두기 위한 가장 안전한 방식)
+		// IsCardReady() 구현에 따라 '없으면 Ready'로 처리되는 경우가 많음.
+		ReproTable.Remove(ForceCardID);
+
+		if (bDebugPrint)
+		{
+			UE_LOG(LogTemp, Warning, TEXT("[CombatCard][DEBUG] Forced Slot[0] = %s"), *ForceCardID.ToString());
+		}
+	}
+	// ================================================
 }
 
 void UAuraCombatCardComponent::TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction)
@@ -23,6 +142,59 @@ void UAuraCombatCardComponent::TickComponent(float DeltaTime, ELevelTick TickTyp
 
 	UpdateReproduction(DeltaTime);
 	TryAutoFillSlots();
+}
+
+UAbilitySystemComponent* UAuraCombatCardComponent::GetOwnerASC() const
+{
+	AActor* OwnerActor = GetOwner();
+	if (!OwnerActor)
+	{
+		return nullptr;
+	}
+
+	// 1) Owner가 IAbilitySystemInterface를 구현한 경우(가장 정석)
+	if (OwnerActor->GetClass()->ImplementsInterface(UAbilitySystemInterface::StaticClass()))
+	{
+		IAbilitySystemInterface* ASI = Cast<IAbilitySystemInterface>(OwnerActor);
+		if (ASI)
+		{
+			return ASI->GetAbilitySystemComponent();
+		}
+	}
+
+	// 2) Owner가 PlayerState가 아니고, Pawn/Character쪽에 ASC가 있는 경우도 있으니 한 번 더 시도
+	//    (프로젝트에 따라 Owner가 PlayerState가 아닐 수도 있으니까 안전장치)
+	if (APawn* PawnOwner = Cast<APawn>(OwnerActor))
+	{
+		AActor* PawnAsActor = PawnOwner;
+		if (PawnAsActor->GetClass()->ImplementsInterface(UAbilitySystemInterface::StaticClass()))
+		{
+			IAbilitySystemInterface* ASI = Cast<IAbilitySystemInterface>(PawnAsActor);
+			if (ASI)
+			{
+				return ASI->GetAbilitySystemComponent();
+			}
+		}
+	}
+
+	// 3) Owner가 PlayerState인데, ASC가 PlayerCharacter에 있을 수도 있어서(네 프로젝트 구조에 따라)
+	if (APlayerState* PS = Cast<APlayerState>(OwnerActor))
+	{
+		if (APawn* Pawn = PS->GetPawn())
+		{
+			AActor* PawnActor = Pawn;
+			if (PawnActor->GetClass()->ImplementsInterface(UAbilitySystemInterface::StaticClass()))
+			{
+				IAbilitySystemInterface* ASI = Cast<IAbilitySystemInterface>(PawnActor);
+				if (ASI)
+				{
+					return ASI->GetAbilitySystemComponent();
+				}
+			}
+		}
+	}
+
+	return nullptr;
 }
 
 void UAuraCombatCardComponent::InitializeCombatCards(const TArray<FName>& InCombatPoolOrder)

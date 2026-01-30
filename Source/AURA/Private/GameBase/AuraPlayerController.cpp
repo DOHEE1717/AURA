@@ -6,48 +6,12 @@
 #include "EnhancedInputSubsystems.h"
 #include "InputActionValue.h"
 
-#include "AbilitySystemComponent.h"
-#include "AbilitySystemInterface.h"
 #include "GameFramework/PlayerState.h"
-#include "Abilities/GameplayAbility.h"
 
 #include "GameBase/AuraPlayerState.h"
 #include "Card/AuraCombatCardComponent.h"
 
-static UAbilitySystemComponent* GetASC_Safe(APlayerController* PC)
-{
-	if (!PC) return nullptr;
 
-	// PlayerState 우선 (ASC in PlayerState)
-	if (APlayerState* PS = PC->GetPlayerState<APlayerState>())
-	{
-		if (UAbilitySystemComponent* ASC = PS->FindComponentByClass<UAbilitySystemComponent>())
-		{
-			return ASC;
-		}
-
-		if (IAbilitySystemInterface* ASI = Cast<IAbilitySystemInterface>(PS))
-		{
-			return ASI->GetAbilitySystemComponent();
-		}
-	}
-
-	// Pawn 대비
-	if (APawn* Pawn = PC->GetPawn())
-	{
-		if (UAbilitySystemComponent* ASC = Pawn->FindComponentByClass<UAbilitySystemComponent>())
-		{
-			return ASC;
-		}
-
-		if (IAbilitySystemInterface* ASI = Cast<IAbilitySystemInterface>(Pawn))
-		{
-			return ASI->GetAbilitySystemComponent();
-		}
-	}
-
-	return nullptr;
-}
 
 AAuraPlayerController::AAuraPlayerController()
 {
@@ -165,44 +129,16 @@ void AAuraPlayerController::TryUseSelectedSlotCard(bool bAltClick)
 		return;
 	}
 
-	// 슬롯 사용 시도
-	FName OutCardID = NAME_None;
-	const bool bConsumed = CardComp->TryConsumeSlot(SelectedIndex, OutCardID);
+	const int32 SlotIdx = FMath::Clamp(SelectedIndex, 0, 2);
+	const ECardUseInput InputType = bAltClick ? ECardUseInput::Alt : ECardUseInput::Primary;
 
-	if (!bConsumed || OutCardID.IsNone())
-	{
-		UE_LOG(LogTemp, Warning, TEXT("[CombatCard] TryConsumeSlot FAILED | Slot=%d"), SelectedIndex);
-		return;
-	}
-
-	UE_LOG(LogTemp, Warning, TEXT("[CombatCard] Consumed | Slot=%d CardID=%s Click=%s"),
-		SelectedIndex,
-		*OutCardID.ToString(),
+	UE_LOG(LogTemp, Warning, TEXT("[CombatCard] UseSlotCard Request | Slot=%d Click=%s"),
+		SlotIdx,
 		bAltClick ? TEXT("RMB(Alt)") : TEXT("LMB(Primary)"));
 
-	// CardID -> AbilityClass 매핑
-	const TMap<FName, TSubclassOf<UGameplayAbility>>& MapToUse = bAltClick ? AltAbilityMap : PrimaryAbilityMap;
+	const bool bOK = CardComp->UseSlotCard(SlotIdx, InputType);
 
-	const TSubclassOf<UGameplayAbility>* FoundAbilityClass = MapToUse.Find(OutCardID);
-	if (!FoundAbilityClass || !(*FoundAbilityClass))
-	{
-		UE_LOG(LogTemp, Warning, TEXT("[CombatCard] No Ability mapped for CardID=%s (%s)"),
-			*OutCardID.ToString(),
-			bAltClick ? TEXT("Alt") : TEXT("Primary"));
-		return;
-	}
-
-	// ASC로 Ability 실행
-	UAbilitySystemComponent* ASC = GetASC_Safe(this);
-	if (!ASC)
-	{
-		UE_LOG(LogTemp, Warning, TEXT("[CombatCard] ASC is null"));
-		return;
-	}
-
-	const bool bActivated = ASC->TryActivateAbilityByClass((*FoundAbilityClass));
-	UE_LOG(LogTemp, Warning, TEXT("[CombatCard] ActivateAbility CardID=%s Ability=%s -> %s"),
-		*OutCardID.ToString(),
-		*GetNameSafe((*FoundAbilityClass).Get()),
-		bActivated ? TEXT("TRUE") : TEXT("FALSE"));
+	UE_LOG(LogTemp, Warning, TEXT("[CombatCard] UseSlotCard Result | Slot=%d -> %s"),
+		SlotIdx,
+		bOK ? TEXT("TRUE") : TEXT("FALSE"));
 }

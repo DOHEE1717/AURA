@@ -2,13 +2,24 @@
 
 
 #include "Card/CardAbility/GravityField/CA_GravityField_Primary.h"
+
 #include "Abilities/Tasks/AbilityTask_WaitTargetData.h"
 #include "Abilities/GameplayAbilityTargetActor.h"
 #include "Abilities/GameplayAbilityTypes.h"
+
+#include "GameplayTagContainer.h"
+#include "AbilitySystemComponent.h"
+
 #include "GameFramework/PlayerController.h"
-#include "Abilities/Tasks/AbilityTask_WaitTargetData.h"
-#include "Abilities/GameplayAbilityTargetActor.h"
 #include "Engine/World.h"
+
+#include "Card/CardAbility/GravityField/GravityFieldActor.h"
+
+
+static const FGameplayTag TAG_TargetingActive =
+	FGameplayTag::RequestGameplayTag(FName("State.Targeting.Active"));
+
+
 
 
 UCA_GravityField_Primary::UCA_GravityField_Primary()
@@ -26,26 +37,24 @@ void UCA_GravityField_Primary::ActivateAbility(const FGameplayAbilitySpecHandle 
 	const FGameplayAbilityActorInfo* ActorInfo, const FGameplayAbilityActivationInfo ActivationInfo,
 	const FGameplayEventData* TriggerEventData)
 {
+	
 	Super::ActivateAbility(Handle, ActorInfo, ActivationInfo, TriggerEventData);
 	
-	UE_LOG(LogTemp, Warning, TEXT("[CA_GravityField_Primary] ActivateAbility: TargetActorClass=%s"),
-		*GetNameSafe(TargetActorClass.Get()));
-
-	UE_LOG(LogTemp, Warning, TEXT("[CA_GravityField_Primary] ConfirmType=%d IsLocallyControlled=%d HasAuthority=%d"),
-		(int32)ConfirmationType.GetValue(),
-		(ActorInfo && ActorInfo->IsLocallyControlled()) ? 1 : 0,
-		(ActorInfo && ActorInfo->IsNetAuthority()) ? 1 : 0);
+	// (권장) 커밋 실패면 즉시 종료
+	if (!CommitAbility(Handle, ActorInfo, ActivationInfo))
+	{
+		EndAbility(Handle, ActorInfo, ActivationInfo, true, true);
+		return;
+	}
 
 	if (!ActorInfo || !ActorInfo->AvatarActor.IsValid())
 	{
-		UE_LOG(LogTemp, Warning, TEXT("[CA_GravityField_Primary] Invalid ActorInfo/Avatar. EndAbility"));
 		EndAbility(Handle, ActorInfo, ActivationInfo, true, true);
 		return;
 	}
 
 	if (!TargetActorClass)
 	{
-		UE_LOG(LogTemp, Warning, TEXT("[CA_GravityField_Primary] TargetActorClass is null. EndAbility"));
 		EndAbility(Handle, ActorInfo, ActivationInfo, true, true);
 		return;
 	}
@@ -53,14 +62,23 @@ void UCA_GravityField_Primary::ActivateAbility(const FGameplayAbilitySpecHandle 
 	UWorld* World = GetWorld();
 	if (!World)
 	{
-		UE_LOG(LogTemp, Warning, TEXT("[CA_GravityField_Primary] World is null. EndAbility"));
 		EndAbility(Handle, ActorInfo, ActivationInfo, true, true);
 		return;
 	}
 
-	// ------------------------------------------------------------
-	// 1) TargetActor를 "직접" 스폰 (아웃라이너에 반드시 나타나야 함)
-	// ------------------------------------------------------------
+	// 이미 남아있으면 정리(중복 발동 방지)
+	if (SpawnedTargetActor)
+	{
+		SpawnedTargetActor->Destroy();
+		SpawnedTargetActor = nullptr;
+	}
+	if (WaitTargetDataTask)
+	{
+		WaitTargetDataTask->EndTask();
+		WaitTargetDataTask = nullptr;
+	}
+
+	// 1) TargetActor 스폰
 	FActorSpawnParameters SpawnParams;
 	SpawnParams.Owner = ActorInfo->OwnerActor.Get();
 	SpawnParams.Instigator = Cast<APawn>(ActorInfo->AvatarActor.Get());
@@ -68,50 +86,91 @@ void UCA_GravityField_Primary::ActivateAbility(const FGameplayAbilitySpecHandle 
 
 	const FTransform SpawnTM = ActorInfo->AvatarActor->GetActorTransform();
 
-	AGameplayAbilityTargetActor* SpawnedTA =
+	SpawnedTargetActor =
 		World->SpawnActor<AGameplayAbilityTargetActor>(TargetActorClass, SpawnTM, SpawnParams);
 
-	UE_LOG(LogTemp, Warning, TEXT("[CA_GravityField_Primary] Spawn TargetActor -> %s"),
-		*GetNameSafe(SpawnedTA));
-
-	if (!SpawnedTA)
+	if (!SpawnedTargetActor)
 	{
-		UE_LOG(LogTemp, Warning, TEXT("[CA_GravityField_Primary] Failed to spawn TargetActor. EndAbility"));
 		EndAbility(Handle, ActorInfo, ActivationInfo, true, true);
 		return;
 	}
 
-	// TargetActor 초기 구동(프리뷰 갱신이 안 도는 케이스 대비)
-	SpawnedTA->SetActorHiddenInGame(false);
-	SpawnedTA->SetActorTickEnabled(true);
-	SpawnedTA->StartTargeting(this);
+	// TargetActor 기본 세팅 (프리뷰 갱신/입력 연결용)
+	APlayerController* PC = ActorInfo->PlayerController.Get();
+	
+	SpawnedTargetActor->SetActorHiddenInGame(false);
+	SpawnedTargetActor->SetActorTickEnabled(true);
+	SpawnedTargetActor->StartTargeting(this);
 
-	// ------------------------------------------------------------
-	// 2) WaitTargetDataUsingActor 로 "이 인스턴스"를 Task에 연결
-	// ------------------------------------------------------------
-	UAbilityTask_WaitTargetData* Task =
+	// 2) WaitTargetDataUsingActor
+	WaitTargetDataTask =
 		UAbilityTask_WaitTargetData::WaitTargetDataUsingActor(
 			this,
 			NAME_None,
 			ConfirmationType,
-			SpawnedTA
+			SpawnedTargetActor
 		);
 
-	if (!Task)
+	if (!WaitTargetDataTask)
 	{
-		UE_LOG(LogTemp, Warning, TEXT("[CA_GravityField_Primary] WaitTargetDataUsingActor task creation failed. EndAbility"));
-		// SpawnedTA는 TargetActor 정책에 따라 직접 Destroy가 필요할 수 있음
-		SpawnedTA->Destroy();
+		SpawnedTargetActor->Destroy();
+		SpawnedTargetActor = nullptr;
+
 		EndAbility(Handle, ActorInfo, ActivationInfo, true, true);
 		return;
 	}
 
-	Task->ValidData.AddDynamic(this, &ThisClass::OnTargetDataReady);
-	Task->Cancelled.AddDynamic(this, &ThisClass::OnTargetDataCancelled);
+	WaitTargetDataTask->ValidData.AddDynamic(this, &ThisClass::OnTargetDataReady);
+	WaitTargetDataTask->Cancelled.AddDynamic(this, &ThisClass::OnTargetDataCancelled);
+	WaitTargetDataTask->ReadyForActivation();
+	
+	if (ActorInfo && ActorInfo->IsLocallyControlled())
+	{
+		if (UAbilitySystemComponent* ASC = ActorInfo->AbilitySystemComponent.Get())
+		{
+			ASC->AddLooseGameplayTag(TAG_TargetingActive);
 
-	Task->ReadyForActivation();
+			UE_LOG(LogTemp, Warning,
+				TEXT("[CA_GravityField_Primary] Add Tag | TagValid=%d HasAfterAdd=%d ASC=%s ASCPtr=%p Owner=%s"),
+				TAG_TargetingActive.IsValid() ? 1 : 0,
+				ASC->HasMatchingGameplayTag(TAG_TargetingActive) ? 1 : 0,
+				*GetNameSafe(ASC),
+				ASC,
+				*GetNameSafe(ASC->GetOwner()));
+		}
+	}
+	
+}
 
-	UE_LOG(LogTemp, Log, TEXT("[CA_GravityField_Primary] Targeting started (1st click should show decal)."));
+void UCA_GravityField_Primary::EndAbility(const FGameplayAbilitySpecHandle Handle,
+	const FGameplayAbilityActorInfo* ActorInfo, const FGameplayAbilityActivationInfo ActivationInfo,
+	bool bReplicateEndAbility, bool bWasCancelled)
+{
+	// 1) 태그 먼저 제거 (Super 전에!)
+	if (ActorInfo && ActorInfo->IsLocallyControlled())
+	{
+		if (UAbilitySystemComponent* ASC = ActorInfo->AbilitySystemComponent.Get())
+		{
+			ASC->RemoveLooseGameplayTag(TAG_TargetingActive);
+			UE_LOG(LogTemp, Warning, TEXT("[CA_GravityField_Primary] Remove Tag: State.Targeting.Active"));
+		}
+	}
+
+	// 2) Task/TA 정리
+	if (WaitTargetDataTask)
+	{
+		WaitTargetDataTask->EndTask();
+		WaitTargetDataTask = nullptr;
+	}
+
+	if (SpawnedTargetActor)
+	{
+		SpawnedTargetActor->Destroy();
+		SpawnedTargetActor = nullptr;
+	}
+
+	Super::EndAbility(Handle, ActorInfo, ActivationInfo, bReplicateEndAbility, bWasCancelled);
+	
 	
 }
 
@@ -119,9 +178,33 @@ void UCA_GravityField_Primary::OnTargetDataReady(const FGameplayAbilityTargetDat
 {
 	UE_LOG(LogTemp, Log, TEXT("[CA_GravityField_Primary] Target confirmed (2nd click)."));
 
-	LogTargetData(DataHandle);
+	// HitLocation 뽑기
+	FVector SpawnLoc = FVector::ZeroVector;
 
-	// 지금 단계에서는 스폰/이펙트 없음. “확정”만 확인.
+	if (DataHandle.Num() > 0)
+	{
+		const FGameplayAbilityTargetData* Data = DataHandle.Get(0);
+		if (Data)
+		{
+			if (const FGameplayAbilityTargetData_SingleTargetHit* HitData =
+				static_cast<const FGameplayAbilityTargetData_SingleTargetHit*>(Data))
+			{
+				SpawnLoc = HitData->HitResult.ImpactPoint;
+			}
+		}
+	}
+
+	// 스폰
+	if (GravityFieldActorClass && GetWorld())
+	{
+		FActorSpawnParameters Params;
+		Params.Owner = GetAvatarActorFromActorInfo();
+		Params.Instigator = Cast<APawn>(GetAvatarActorFromActorInfo());
+		Params.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+
+		GetWorld()->SpawnActor<AGravityFieldActor>(GravityFieldActorClass, SpawnLoc, FRotator::ZeroRotator, Params);
+	}
+
 	EndAbility(CurrentSpecHandle, CurrentActorInfo, CurrentActivationInfo, true, false);
 }
 

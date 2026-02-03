@@ -11,7 +11,44 @@
 #include "GameBase/AuraPlayerState.h"
 #include "Card/AuraCombatCardComponent.h"
 
+#include "AbilitySystemComponent.h"
+#include "GameplayTagContainer.h"
+#include "AbilitySystemInterface.h"
 
+
+static const FGameplayTag TAG_TargetingActive =
+	FGameplayTag::RequestGameplayTag(FName("State.Targeting.Active"));
+
+static UAbilitySystemComponent* GetASC_Preferred(AAuraPlayerController* PC)
+{
+	if (!PC) return nullptr;
+
+	// 1) PlayerState ASC
+	if (AAuraPlayerState* APS = PC->GetPlayerState<AAuraPlayerState>())
+	{
+		if (IAbilitySystemInterface* ASI = Cast<IAbilitySystemInterface>(APS))
+		{
+			if (UAbilitySystemComponent* ASC = ASI->GetAbilitySystemComponent())
+			{
+				return ASC;
+			}
+		}
+	}
+
+	// 2) Pawn/Character ASC (Ability가 여기 붙는 경우 많음)
+	if (APawn* P = PC->GetPawn())
+	{
+		if (IAbilitySystemInterface* ASI = Cast<IAbilitySystemInterface>(P))
+		{
+			if (UAbilitySystemComponent* ASC = ASI->GetAbilitySystemComponent())
+			{
+				return ASC;
+			}
+		}
+	}
+
+	return nullptr;
+}
 
 AAuraPlayerController::AAuraPlayerController()
 {
@@ -73,12 +110,45 @@ void AAuraPlayerController::SetupInputComponent()
 
 void AAuraPlayerController::OnCardLMB()
 {
+	UAbilitySystemComponent* ASC = GetASC_Preferred(this);
+
+	UE_LOG(LogTemp, Warning,
+		TEXT("[CardInput] LMB PreCheck | ASC=%s ASCPtr=%p Owner=%s HasActive=%d"),
+		*GetNameSafe(ASC),
+		ASC,
+		ASC ? *GetNameSafe(ASC->GetOwner()) : TEXT("None"),
+		(ASC && ASC->HasMatchingGameplayTag(TAG_TargetingActive)) ? 1 : 0);
+
+	if (ASC && ASC->HasMatchingGameplayTag(TAG_TargetingActive))
+	{
+		UE_LOG(LogTemp, Warning, TEXT("[CardInput] LMB -> CONFIRM (Targeting.Active)"));
+		ASC->LocalInputConfirm();
+		return;
+	}
+
 	UE_LOG(LogTemp, Warning, TEXT("[CardInput] LMB | SelectedIndex=%d"), SelectedIndex);
 	TryUseSelectedSlotCard(false);
 }
 
 void AAuraPlayerController::OnCardRMB()
 {
+	UAbilitySystemComponent* ASC = GetASC_Preferred(this);
+
+	UE_LOG(LogTemp, Warning,
+		TEXT("[CardInput] RMB PreCheck | ASC=%s ASCPtr=%p Owner=%s HasActive=%d"),
+		*GetNameSafe(ASC),
+		ASC,
+		ASC ? *GetNameSafe(ASC->GetOwner()) : TEXT("None"),
+		(ASC && ASC->HasMatchingGameplayTag(TAG_TargetingActive)) ? 1 : 0);
+
+	// ★ 타겟팅 중이면 Cancel로 소비
+	if (ASC && ASC->HasMatchingGameplayTag(TAG_TargetingActive))
+	{
+		UE_LOG(LogTemp, Warning, TEXT("[CardInput] RMB -> CANCEL (Targeting.Active)"));
+		ASC->LocalInputCancel();
+		return;
+	}
+
 	UE_LOG(LogTemp, Warning, TEXT("[CardInput] RMB | SelectedIndex=%d"), SelectedIndex);
 	TryUseSelectedSlotCard(true);
 }

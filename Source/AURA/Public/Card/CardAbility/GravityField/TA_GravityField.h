@@ -8,9 +8,11 @@
 
 class UDecalComponent;
 class UMaterialInterface;
+
 /**
  * 
  */
+
 UCLASS()
 class AURA_API ATA_GravityField : public AGameplayAbilityTargetActor
 {

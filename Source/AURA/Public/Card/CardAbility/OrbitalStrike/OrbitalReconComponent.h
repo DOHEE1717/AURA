@@ -27,6 +27,19 @@ struct FOrbitalReconSnapshot
 	TArray<TObjectPtr<AActor>> RevealedActors;
 };
 
+USTRUCT()
+struct FReconCharacterMesh
+{
+	GENERATED_BODY()
+
+	bool bBodyOwnerNoSee = true;
+	bool bBodyVisible = false;
+	bool bBodyHiddenInGame = true;
+
+	bool bArmsVisible = true;
+	bool bArmsHiddenInGame = false;
+};
+
 UCLASS( ClassGroup=(Custom), meta=(BlueprintSpawnableComponent) )
 class AURA_API UOrbitalReconComponent : public UActorComponent
 {
@@ -124,6 +137,7 @@ private:
 
 	APlayerController* GetOwningPC() const;
 	
-
+private:
+	FReconCharacterMesh CharacterMeshSnapshot;
 		
 };

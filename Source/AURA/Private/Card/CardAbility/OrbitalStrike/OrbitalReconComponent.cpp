@@ -14,6 +14,7 @@
 #include "UObject/ConstructorHelpers.h"
 #include "EnhancedInputSubsystems.h"
 #include "InputMappingContext.h"
+#include "Character/PlayerCharacter.h"
 #include "Engine/LocalPlayer.h"
 
 
@@ -127,6 +128,8 @@ bool UOrbitalReconComponent::OpenReconView()
 	// 회전은 yaw만 맞추되, 위치는 정수평으로 고정
 	const float Yaw = AvatarPawn ? AvatarPawn->GetActorRotation().Yaw : 0.f;
 	const FRotator SpawnRot(0.f, Yaw, 0.f);
+	
+	
 
 	// 복구용 저장(최초 1회만)
 	if (!PrevViewTarget.IsValid())
@@ -135,6 +138,30 @@ bool UOrbitalReconComponent::OpenReconView()
 		bPrevShowMouseCursor = PC->bShowMouseCursor;
 	}
 
+	// ===== Character Mesh 처리 =====
+	if (APawn* Pawn = PC->GetPawn())
+	{
+		if (APlayerCharacter* PCChar = Cast<APlayerCharacter>(Pawn))
+		{
+			// --- 스냅샷 저장 ---
+			if (USkeletalMeshComponent* Body = PCChar->GetMesh())
+			{
+				CharacterMeshSnapshot.bBodyOwnerNoSee   = Body->bOwnerNoSee;
+				CharacterMeshSnapshot.bBodyVisible      = Body->IsVisible();
+				CharacterMeshSnapshot.bBodyHiddenInGame = Body->bHiddenInGame;
+			}
+
+			if (USkeletalMeshComponent* Arms = PCChar->FindComponentByClass<USkeletalMeshComponent>())
+			{
+				CharacterMeshSnapshot.bArmsVisible      = Arms->IsVisible();
+				CharacterMeshSnapshot.bArmsHiddenInGame = Arms->bHiddenInGame;
+			}
+
+			// --- Recon 전용 상태 적용 ---
+			PCChar->EnterReconView();
+		}
+	}
+	
 	// ViewActor 준비(없으면 스폰, 있으면 재사용)
 	if (!SpawnedViewActor)
 	{
@@ -253,6 +280,15 @@ void UOrbitalReconComponent::CloseReconView()
 
 	FInputModeGameOnly Mode;
 	PC->SetInputMode(Mode);
+	
+	// ===== Character Mesh 복원 =====
+	if (APawn* Pawn = PC->GetPawn())
+	{
+		if (APlayerCharacter* PCChar = Cast<APlayerCharacter>(Pawn))
+		{
+			PCChar->ExitReconView();
+		}
+	}
 }
 
 AOrbitalReconActor* UOrbitalReconComponent::GetReconViewActor() const

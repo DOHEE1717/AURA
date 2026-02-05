@@ -151,6 +151,44 @@ void APlayerCharacter::Tick(float DeltaTime)
 	Super::Tick(DeltaTime);
 }
 
+void APlayerCharacter::EnterReconView()
+{
+	// 1) 월드 바디 메시 보이게
+	if (USkeletalMeshComponent* BodyMesh = GetMesh())
+	{
+		BodyMesh->SetOwnerNoSee(false);          // Recon 카메라는 Owner가 아님
+		BodyMesh->SetVisibility(true, true);
+		BodyMesh->SetHiddenInGame(false, true);
+	}
+
+	// 2) 1인칭 팔 숨김
+	if (FirstPersonArmsMesh)
+	{
+		FirstPersonArmsMesh->SetVisibility(false, true);
+		FirstPersonArmsMesh->SetHiddenInGame(true, true);
+	}
+}
+
+void APlayerCharacter::ExitReconView()
+{
+	// BeginPlay 상태로 복원
+
+	// 1) 월드 바디 다시 숨김
+	if (USkeletalMeshComponent* BodyMesh = GetMesh())
+	{
+		BodyMesh->SetOwnerNoSee(true);
+		BodyMesh->SetVisibility(false, true);
+		BodyMesh->SetHiddenInGame(true, true);
+	}
+
+	// 2) 1인칭 팔 다시 표시
+	if (FirstPersonArmsMesh)
+	{
+		FirstPersonArmsMesh->SetVisibility(true, true);
+		FirstPersonArmsMesh->SetHiddenInGame(false, true);
+	}
+}
+
 void APlayerCharacter::InputLook(const FInputActionValue& Value)
 {const FVector2D LookAxis=Value.Get<FVector2D>();
 	

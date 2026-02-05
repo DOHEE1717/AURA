@@ -70,7 +70,10 @@ protected:
 public:
 	virtual void Tick(float DeltaTime) override;
 	
-
+public:
+	// ===== Recon View =====
+	void EnterReconView();
+	void ExitReconView();
 	
 	
 	
@@ -99,4 +102,6 @@ protected:
 	//본 숨기기
 	void ApplyArmsHiddenBones();
 	
+public:
+	FORCEINLINE USkeletalMeshComponent* GetFirstPersonArmsMesh() const { return FirstPersonArmsMesh; }
 };

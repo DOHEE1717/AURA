@@ -12,6 +12,7 @@ class UAbilitySystemComponent;
 class UAuraCombatCardComponent;
 class UDA_AuraCardAbilityMapping;
 class UGameplayAbility;
+class UOrbitalReconComponent;
 
 
 /**
@@ -33,6 +34,7 @@ public:
 	/** 전투 카드 컴포넌트 Getter */
 	UFUNCTION(BlueprintCallable, Category="Aura|CombatCard")
 	UAuraCombatCardComponent* GetCombatCardComponent() const { return CombatCardComponent; }
+		
 	
 protected:
 	//GAS를 구현하는 ASC(AbilitySystemComponent) 컴포넌트 생성
@@ -42,6 +44,14 @@ protected:
 	// Combat Card Component 가져오기
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Aura|CombatCard")
 	TObjectPtr<UAuraCombatCardComponent> CombatCardComponent;
+	
+	// Orbital Recon Component (Alt 정찰용)
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Aura|Recon")
+	TObjectPtr<UOrbitalReconComponent> OrbitalReconComp;
+
+public:
+	UFUNCTION(BlueprintCallable, Category="Aura|Recon")
+	UOrbitalReconComponent* GetOrbitalReconComponent() const { return OrbitalReconComp; }
 	
 protected:
 	virtual void BeginPlay() override;

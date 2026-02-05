@@ -58,9 +58,6 @@ public:
 	UFUNCTION(BlueprintCallable, Category="Card|Ability")
 	bool UseSlotCard(int32 SlotIndex, ECardUseInput InputType);
 	
-	// 매핑 에셋 getter
-	const UDA_AuraCardAbilityMapping* GetAbilityMappingAsset() const { return AbilityMappingAsset; }
-
 	// 전투 카드 풀 getter (InitializeCombatCards로 들어온 풀)
 	const TArray<FName>& GetCombatPoolOrder() const { return CombatPoolOrder; }
 
@@ -72,8 +69,14 @@ protected:
 
 
 	// Ability 매핑 에셋(에디터에서 DA_CardAbilityMapping_Default 지정)
-	UPROPERTY(EditDefaultsOnly, Category="Card|Ability")
+	UPROPERTY()
 	TObjectPtr<UDA_AuraCardAbilityMapping> AbilityMappingAsset;
+	
+public:
+	const UDA_AuraCardAbilityMapping* GetAbilityMappingAsset() const
+	{
+		return AbilityMappingAsset;
+	}
 
 	
 private:

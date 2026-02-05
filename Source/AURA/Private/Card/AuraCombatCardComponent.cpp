@@ -14,6 +14,21 @@
 UAuraCombatCardComponent::UAuraCombatCardComponent()
 {
 	PrimaryComponentTick.bCanEverTick = true;
+	
+	// ===== Ability Mapping Asset (Hard Bind) =====
+	static ConstructorHelpers::FObjectFinder<UDA_AuraCardAbilityMapping> MappingFinder(
+		TEXT("/Game/_BP/Card/DA_CardAbilityMapping_Default")
+	);
+
+	if (MappingFinder.Succeeded())
+	{
+		AbilityMappingAsset = MappingFinder.Object;
+	}
+	else
+	{
+		UE_LOG(LogTemp, Error,
+			TEXT("[CombatCard] Failed to load DA_CardAbilityMapping_Default"));
+	}
 }
 
 bool UAuraCombatCardComponent::UseSlotCard(int32 SlotIndex, ECardUseInput InputType)
@@ -111,6 +126,18 @@ bool UAuraCombatCardComponent::UseSlotCard(int32 SlotIndex, ECardUseInput InputT
 void UAuraCombatCardComponent::BeginPlay()
 {
 	Super::BeginPlay();
+	
+	if (!AbilityMappingAsset)
+	{
+		UE_LOG(LogTemp, Error,
+			TEXT("[CombatCard] BeginPlay: AbilityMappingAsset is NULL"));
+	}
+	else
+	{
+		UE_LOG(LogTemp, Log,
+			TEXT("[CombatCard] BeginPlay: AbilityMappingAsset OK (%s)"),
+			*AbilityMappingAsset->GetName());
+	}
 	
 	// ===== DEBUG: Slot[0] force Card_GravityField =====
 	{

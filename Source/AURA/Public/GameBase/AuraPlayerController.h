@@ -2,6 +2,9 @@
 
 #include "CoreMinimal.h"
 #include "GameFramework/PlayerController.h"
+#include "GameplayTagContainer.h"
+#include "GameBase/AuraGameplayTags.h"
+
 #include "AuraPlayerController.generated.h"
 
 
@@ -11,7 +14,10 @@
 class UInputMappingContext;
 class UInputAction;
 class UAuraCombatCardComponent;
+class UOrbitalReconComponent;
+class AOrbitalReconActor;
 struct FInputActionValue;
+
 
 UCLASS()
 class AURA_API AAuraPlayerController: public APlayerController
@@ -31,20 +37,30 @@ private:
 	//IA들 붙이기
 	
 	//IMC 카드
-	UPROPERTY(EditDefaultsOnly, Category="Input|Card")
-	TObjectPtr<UInputMappingContext>IMC_Card;
-	
-	//좌클릭
-	UPROPERTY(EditDefaultsOnly, Category="Input|Card")
+	UPROPERTY()
+	TObjectPtr<UInputMappingContext> IMC_Card;
+
+	UPROPERTY()
 	TObjectPtr<UInputAction> IA_CardLMB;
-	
-	//우클릭
-	UPROPERTY(EditDefaultsOnly, Category="Input|Card")
+
+	UPROPERTY()
 	TObjectPtr<UInputAction> IA_CardRMB;
-	
-	//카드넘기기(휠)
-	UPROPERTY(EditDefaultsOnly, Category="Input|Card")
+
+	UPROPERTY()
 	TObjectPtr<UInputAction> IA_CardSelect;
+	
+	// ===== Recon Input =====
+	UPROPERTY()
+	TObjectPtr<UInputMappingContext> IMC_Recon;
+
+	UPROPERTY()
+	TObjectPtr<UInputAction> IA_ReconMove;
+
+	UPROPERTY()
+	TObjectPtr<UInputAction> IA_ReconZoom;
+
+	UPROPERTY()
+	TObjectPtr<UInputAction> IA_ReconExit;
 	
 	UPROPERTY(VisibleAnywhere, Category="Card")
 	int32 SelectedIndex = 0; // 0~2
@@ -61,5 +77,10 @@ private:
 	void SelectPrev(); //<이전 카드
 	void TryUseSelectedSlotCard(bool bAltClick);
 		
+	// Recon Handlers 
+	bool IsReconViewActive() const;
+	void OnReconMove(const FInputActionValue& Value);
+	void OnReconZoom(const FInputActionValue& Value);
+	void OnReconExit();
 	
 };

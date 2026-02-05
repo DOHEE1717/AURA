@@ -10,10 +10,41 @@
 #include "Kismet/GameplayStatics.h"
 #include "EngineUtils.h"
 
+#include "Blueprint/UserWidget.h"
+#include "UObject/ConstructorHelpers.h"
+#include "EnhancedInputSubsystems.h"
+#include "InputMappingContext.h"
+#include "Engine/LocalPlayer.h"
+
 
 UOrbitalReconComponent::UOrbitalReconComponent()
 {
 	PrimaryComponentTick.bCanEverTick = false;
+	
+	// Recon IMC
+	if (!ReconIMC)
+	{
+		static ConstructorHelpers::FObjectFinder<UInputMappingContext> IMC_Finder(
+			TEXT("/Game/_BP/Input/Recon/IMC_Recon.IMC_Recon")
+		);
+		if (IMC_Finder.Succeeded())
+		{
+			ReconIMC = IMC_Finder.Object;
+		}
+	}
+
+	// Recon Overlay Widget
+	if (!ReconOverlayWidgetClass)
+	{
+		
+		static ConstructorHelpers::FClassFinder<UUserWidget> WBP_Finder(
+			TEXT("/Game/_BP/UI/Recon/WBP_ReconOverlay")
+		);
+		if (WBP_Finder.Succeeded())
+		{
+			ReconOverlayWidgetClass = WBP_Finder.Class;
+		}
+	}
 }
 
 
@@ -25,6 +56,12 @@ void UOrbitalReconComponent::BeginPlay()
 	if (!ReconViewActorClass)
 	{
 		ReconViewActorClass = AOrbitalReconActor::StaticClass();
+	}
+	
+	// 기본 인스티게이터 캐싱(싱글/로컬 기준)
+	if (APlayerController* PC = GetOwningPC())
+	{
+		CachedInstigatorPawn = PC->GetPawn();
 	}
 	
 }
@@ -66,37 +103,108 @@ void UOrbitalReconComponent::ExecuteReconScan(const FVector& Center, float Radiu
 
 bool UOrbitalReconComponent::OpenReconView()
 {
+	UE_LOG(LogTemp, Warning, TEXT("[ReconComp] OpenReconView ENTER Owner=%s PC=%s ReconViewActorClass=%s OverlayClass=%s IMC=%s"),
+		*GetNameSafe(GetOwner()),
+		*GetNameSafe(GetOwningPC()),
+		*GetNameSafe(ReconViewActorClass),
+		*GetNameSafe(ReconOverlayWidgetClass),
+		*GetNameSafe(ReconIMC));
+	
 	UWorld* World = GetWorld();
 	if (!World) return false;
 
 	APlayerController* PC = GetOwningPC();
 	if (!PC) return false;
+	
+	// ===== Spawn Transform (플레이어 머리 위) =====
+	APawn* AvatarPawn = PC->GetPawn();
+	const FVector BaseLoc = AvatarPawn ? AvatarPawn->GetActorLocation() : FVector::ZeroVector;
 
-	// 이미 열려있으면 true
-	if (SpawnedViewActor)
+	// 캐릭터 “딱 머리 위”: X/Y 동일, Z만 올림
+	FVector SpawnLoc = BaseLoc;
+	SpawnLoc.Z += 1000.f;   // 원하는 값(가까우면 800~1000 사이로 튜닝)
+
+	// 회전은 yaw만 맞추되, 위치는 정수평으로 고정
+	const float Yaw = AvatarPawn ? AvatarPawn->GetActorRotation().Yaw : 0.f;
+	const FRotator SpawnRot(0.f, Yaw, 0.f);
+
+	// 복구용 저장(최초 1회만)
+	if (!PrevViewTarget.IsValid())
 	{
-		PC->SetViewTargetWithBlend(SpawnedViewActor, 0.2f);
-		return true;
+		PrevViewTarget = PC->GetViewTarget();
+		bPrevShowMouseCursor = PC->bShowMouseCursor;
 	}
 
-	if (!ReconViewActorClass) return false;
+	// ViewActor 준비(없으면 스폰, 있으면 재사용)
+	if (!SpawnedViewActor)
+	{
+		if (!ReconViewActorClass)
+		{
+			return false;
+		}
 
-	FActorSpawnParameters Params;
-	Params.Owner = GetOwner();
-	Params.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+		FActorSpawnParameters Params;
+		Params.Owner = GetOwner();
+		Params.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
 
-	SpawnedViewActor = World->SpawnActor<AOrbitalReconActor>(ReconViewActorClass, Params);
-	if (!SpawnedViewActor) return false;
-
+		SpawnedViewActor = World->SpawnActor<AOrbitalReconActor>(ReconViewActorClass, SpawnLoc, SpawnRot, Params);
+		if (!SpawnedViewActor) return false;
+		
+		UE_LOG(LogTemp, Warning, TEXT("[ReconComp] SpawnedViewActor=%s"), *GetNameSafe(SpawnedViewActor));
+	}
+	
+	// 이미 존재해도 진입 시점마다 플레이어 기준으로 위치 갱신
+	SpawnedViewActor->SetActorLocation(SpawnLoc);
+	SpawnedViewActor->SetActorRotation(SpawnRot);
+	SpawnedViewActor->SetMoveReferenceYaw(Yaw);
+	
+	
+	// 최신 스냅샷 기준으로 뷰 초기화
 	SpawnedViewActor->InitView(LastSnapshot.Center, LastSnapshot.Radius);
 
 	// 카메라 전환
 	PC->SetViewTargetWithBlend(SpawnedViewActor, 0.2f);
+
+	// ===== IMC_Recon 추가 =====
+	ULocalPlayer* LP = PC->GetLocalPlayer();
+	UEnhancedInputLocalPlayerSubsystem* Subsys = LP ? LP->GetSubsystem<UEnhancedInputLocalPlayerSubsystem>() : nullptr;
+
+	UE_LOG(LogTemp, Warning, TEXT("[ReconComp] LP=%s Subsys=%s ReconIMC=%s"),
+		*GetNameSafe(LP),
+		*GetNameSafe(Subsys),
+		*GetNameSafe(ReconIMC));
+
+	if (ReconIMC && Subsys)
+	{
+		Subsys->AddMappingContext(ReconIMC, 100);
+
+		// ★ 중요: 즉시 매핑 리빌드 (간헐적으로 “추가됐는데 입력 안 먹음” 방지)
+		Subsys->RequestRebuildControlMappings(FModifyContextOptions(), EInputMappingRebuildType::Rebuild);
+	}
+
+	// UI 표시(깡통)
+	if (!ReconOverlayWidget && ReconOverlayWidgetClass)
+	{
+		ReconOverlayWidget = CreateWidget<UUserWidget>(PC, ReconOverlayWidgetClass);
+		if (ReconOverlayWidget)
+		{
+			ReconOverlayWidget->AddToViewport(1000);
+		}
+	}
+
+	// 커서/입력 모드
 	PC->bShowMouseCursor = true;
 
-	// TODO(다음 단계):
-	// - 입력 라우팅(확대/이동/닫기 키)
-	// - 전투 진입 시 강제 종료
+	FInputModeGameAndUI Mode;
+	Mode.SetHideCursorDuringCapture(false);
+	Mode.SetLockMouseToViewportBehavior(EMouseLockMode::DoNotLock);
+
+	if (ReconOverlayWidget)
+	{
+		Mode.SetWidgetToFocus(ReconOverlayWidget->TakeWidget());
+	}
+
+	PC->SetInputMode(Mode);
 
 	return true;
 }
@@ -104,25 +212,62 @@ bool UOrbitalReconComponent::OpenReconView()
 void UOrbitalReconComponent::CloseReconView()
 {
 	APlayerController* PC = GetOwningPC();
-	if (PC)
+	if (!PC) return;
+
+	// IMC 제거
+	if (ReconIMC)
 	{
-		// 기본은 PC가 소유한 Pawn으로 복귀
+		if (ULocalPlayer* LP = PC->GetLocalPlayer())
+		{
+			if (UEnhancedInputLocalPlayerSubsystem* Subsys = LP->GetSubsystem<UEnhancedInputLocalPlayerSubsystem>())
+			{
+				Subsys->RemoveMappingContext(ReconIMC);
+			}
+		}
+	}
+
+	// UI 제거
+	if (ReconOverlayWidget)
+	{
+		ReconOverlayWidget->RemoveFromParent();
+		ReconOverlayWidget = nullptr;
+	}
+
+	// ViewTarget 복원(저장된 게 있으면 우선)
+	if (PrevViewTarget.IsValid())
+	{
+		PC->SetViewTargetWithBlend(PrevViewTarget.Get(), 0.2f);
+		PrevViewTarget.Reset();
+	}
+	else
+	{
+		// 예외: 저장이 없으면 Pawn 복귀
 		if (APawn* Pawn = PC->GetPawn())
 		{
 			PC->SetViewTargetWithBlend(Pawn, 0.2f);
 		}
-		PC->bShowMouseCursor = false;
 	}
 
-	if (SpawnedViewActor)
-	{
-		SpawnedViewActor->Destroy();
-		SpawnedViewActor = nullptr;
-	}
+	// 커서/입력 모드 복원
+	PC->bShowMouseCursor = bPrevShowMouseCursor;
+
+	FInputModeGameOnly Mode;
+	PC->SetInputMode(Mode);
+}
+
+AOrbitalReconActor* UOrbitalReconComponent::GetReconViewActor() const
+{
+	return SpawnedViewActor;
+}
+
+bool UOrbitalReconComponent::IsReconViewOpen() const
+{
+	// ReconOverlayWidget가 떠있거나, ViewActor가 있으면 열린 것으로 간주
+	return (ReconOverlayWidget != nullptr) || (SpawnedViewActor != nullptr);
 }
 
 void UOrbitalReconComponent::CollectTargetsInSphere(const FVector& Center, float Radius,
-	TArray<AActor*>& OutActors) const
+                                                    TArray<AActor*>& OutActors) const
 {
 	OutActors.Reset();
 
@@ -195,3 +340,5 @@ APlayerController* UOrbitalReconComponent::GetOwningPC() const
 
 	return UGameplayStatics::GetPlayerController(World, 0);
 }
+
+

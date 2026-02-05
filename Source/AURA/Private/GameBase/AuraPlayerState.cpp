@@ -6,6 +6,7 @@
 #include "Card/AuraCombatCardComponent.h"
 #include "Card/DA_AuraCardAbilityMapping.h"
 #include "Abilities/GameplayAbility.h"
+#include "Card/CardAbility/OrbitalStrike/OrbitalReconComponent.h"
 
 
 
@@ -20,6 +21,8 @@ AAuraPlayerState::AAuraPlayerState()
 	
 	//CardCombatComponent 추가
 	CombatCardComponent=CreateDefaultSubobject<UAuraCombatCardComponent>(TEXT("CombatCardComponent"));
+	
+	OrbitalReconComp = CreateDefaultSubobject<UOrbitalReconComponent>(TEXT("OrbitalReconComp"));
 	
 }
 

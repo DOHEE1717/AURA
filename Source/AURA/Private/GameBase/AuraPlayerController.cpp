@@ -10,14 +10,15 @@
 
 #include "GameBase/AuraPlayerState.h"
 #include "Card/AuraCombatCardComponent.h"
-
+#include "InputMappingContext.h"
+#include "InputAction.h"
+#include "UObject/ConstructorHelpers.h"
 #include "AbilitySystemComponent.h"
 #include "GameplayTagContainer.h"
+#include "Card/CardAbility/OrbitalStrike/OrbitalReconComponent.h"
+#include "Card/CardAbility/OrbitalStrike/OrbitalReconActor.h"
 #include "AbilitySystemInterface.h"
 
-
-static const FGameplayTag TAG_TargetingActive =
-	FGameplayTag::RequestGameplayTag(FName("State.Targeting.Active"));
 
 static UAbilitySystemComponent* GetASC_Preferred(AAuraPlayerController* PC)
 {
@@ -52,6 +53,79 @@ static UAbilitySystemComponent* GetASC_Preferred(AAuraPlayerController* PC)
 
 AAuraPlayerController::AAuraPlayerController()
 {
+	// ===== Card Input Assets (Hard Reference) =====
+
+	// IMC_Card
+	static ConstructorHelpers::FObjectFinder<UInputMappingContext> IMC_Card_Finder(
+		TEXT("/Game/_BP/Input/IMC_Card")
+	);
+	if (IMC_Card_Finder.Succeeded())
+	{
+		IMC_Card = IMC_Card_Finder.Object;
+	}
+
+	// IA_CardLMB
+	static ConstructorHelpers::FObjectFinder<UInputAction> IA_LMB_Finder(
+		TEXT("/Game/_BP/Input/IA_CardLMB")
+	);
+	if (IA_LMB_Finder.Succeeded())
+	{
+		IA_CardLMB = IA_LMB_Finder.Object;
+	}
+
+	// IA_CardRMB
+	static ConstructorHelpers::FObjectFinder<UInputAction> IA_RMB_Finder(
+		TEXT("/Game/_BP/Input/IA_CardRMB")
+	);
+	if (IA_RMB_Finder.Succeeded())
+	{
+		IA_CardRMB = IA_RMB_Finder.Object;
+	}
+
+	// IA_CardSelect (휠)
+	static ConstructorHelpers::FObjectFinder<UInputAction> IA_Select_Finder(
+		TEXT("/Game/_BP/Input/IA_CardSelect")
+	);
+	if (IA_Select_Finder.Succeeded())
+	{
+		IA_CardSelect = IA_Select_Finder.Object;
+	}
+	
+	// IMC_Recon
+	static ConstructorHelpers::FObjectFinder<UInputMappingContext> IMC_Recon_Finder(
+		TEXT("/Game/_BP/Input/Recon/IMC_Recon.IMC_Recon")
+	);
+	if (IMC_Recon_Finder.Succeeded())
+	{
+		IMC_Recon = IMC_Recon_Finder.Object;
+	}
+
+	// IA_Recon_Move
+	static ConstructorHelpers::FObjectFinder<UInputAction> IA_ReconMove_Finder(
+		TEXT("/Game/_BP/Input/Recon/IA_Recon_Move.IA_Recon_Move")
+	);
+	if (IA_ReconMove_Finder.Succeeded())
+	{
+		IA_ReconMove = IA_ReconMove_Finder.Object;
+	}
+
+	// IA_Recon_Zoom
+	static ConstructorHelpers::FObjectFinder<UInputAction> IA_ReconZoom_Finder(
+		TEXT("/Game/_BP/Input/Recon/IA_Recon_Zoom.IA_Recon_Zoom")
+	);
+	if (IA_ReconZoom_Finder.Succeeded())
+	{
+		IA_ReconZoom = IA_ReconZoom_Finder.Object;
+	}
+
+	// IA_Recon_Exit
+	static ConstructorHelpers::FObjectFinder<UInputAction> IA_ReconExit_Finder(
+		TEXT("/Game/_BP/Input/Recon/IA_Recon_Exit.IA_Recon_Exit")
+	);
+	if (IA_ReconExit_Finder.Succeeded())
+	{
+		IA_ReconExit = IA_ReconExit_Finder.Object;
+	}
 }
 
 void AAuraPlayerController::BeginPlay()
@@ -68,11 +142,12 @@ void AAuraPlayerController::BeginPlay()
 	// IMC 연결
 	if (ULocalPlayer* LP = GetLocalPlayer())
 	{
-		if (UEnhancedInputLocalPlayerSubsystem* Subsys = LP->GetSubsystem<UEnhancedInputLocalPlayerSubsystem>())
+		if (UEnhancedInputLocalPlayerSubsystem* Subsystem =
+			LP->GetSubsystem<UEnhancedInputLocalPlayerSubsystem>())
 		{
 			if (IMC_Card)
 			{
-				Subsys->AddMappingContext(IMC_Card, 100);
+				Subsystem->AddMappingContext(IMC_Card, 1);
 			}
 		}
 	}
@@ -106,10 +181,31 @@ void AAuraPlayerController::SetupInputComponent()
 	{
 		EIC->BindAction(IA_CardSelect, ETriggerEvent::Triggered, this, &ThisClass::OnCardSelect);
 	}
+	
+	// ===== Recon Bindings =====
+	if (IA_ReconMove)
+	{
+		EIC->BindAction(IA_ReconMove, ETriggerEvent::Triggered, this, &ThisClass::OnReconMove);
+	}
+
+	if (IA_ReconZoom)
+	{
+		EIC->BindAction(IA_ReconZoom, ETriggerEvent::Triggered, this, &ThisClass::OnReconZoom);
+	}
+
+	if (IA_ReconExit)
+	{
+		EIC->BindAction(IA_ReconExit, ETriggerEvent::Started, this, &ThisClass::OnReconExit);
+	}
 }
 
 void AAuraPlayerController::OnCardLMB()
 {
+	if (IsReconViewActive())
+	{
+		return;
+	}
+	
 	UAbilitySystemComponent* ASC = GetASC_Preferred(this);
 
 	UE_LOG(LogTemp, Warning,
@@ -132,6 +228,11 @@ void AAuraPlayerController::OnCardLMB()
 
 void AAuraPlayerController::OnCardRMB()
 {
+	if (IsReconViewActive())
+	{
+		return;
+	}
+	
 	UAbilitySystemComponent* ASC = GetASC_Preferred(this);
 
 	UE_LOG(LogTemp, Warning,
@@ -155,6 +256,11 @@ void AAuraPlayerController::OnCardRMB()
 
 void AAuraPlayerController::OnCardSelect(const FInputActionValue& Value)
 {
+	if (IsReconViewActive())
+	{
+		return;
+	}
+	
 	const float AxisValue = Value.Get<float>();
 	const float Sign = FMath::Sign(AxisValue);
 
@@ -212,3 +318,67 @@ void AAuraPlayerController::TryUseSelectedSlotCard(bool bAltClick)
 		SlotIdx,
 		bOK ? TEXT("TRUE") : TEXT("FALSE"));
 }
+
+bool AAuraPlayerController::IsReconViewActive() const
+{
+	if (AAuraPlayerState* APS = GetPlayerState<AAuraPlayerState>())
+	{
+		if (UOrbitalReconComponent* ReconComp = APS->FindComponentByClass<UOrbitalReconComponent>())
+		{
+			return ReconComp->GetReconViewActor() != nullptr;
+		}
+	}
+	return false;
+}
+
+void AAuraPlayerController::OnReconMove(const FInputActionValue& Value)
+{
+	if (!IsReconViewActive()) return;
+
+	AAuraPlayerState* APS = GetPlayerState<AAuraPlayerState>();
+	if (!APS) return;
+
+	UOrbitalReconComponent* ReconComp = APS->FindComponentByClass<UOrbitalReconComponent>();
+	if (!ReconComp) return;
+
+	AOrbitalReconActor* ViewActor = ReconComp->GetReconViewActor();
+	if (!ViewActor) return;
+
+	const FVector2D Axis = Value.Get<FVector2D>();
+	const float DT = GetWorld() ? GetWorld()->GetDeltaSeconds() : 0.f;
+
+	ViewActor->ApplyMoveInput(Axis, DT);	
+}
+
+void AAuraPlayerController::OnReconZoom(const FInputActionValue& Value)
+{
+	if (!IsReconViewActive()) return;
+
+	AAuraPlayerState* APS = GetPlayerState<AAuraPlayerState>();
+	if (!APS) return;
+
+	UOrbitalReconComponent* ReconComp = APS->FindComponentByClass<UOrbitalReconComponent>();
+	if (!ReconComp) return;
+
+	AOrbitalReconActor* ViewActor = ReconComp->GetReconViewActor();
+	if (!ViewActor) return;
+
+	const float Axis = Value.Get<float>();
+	const float DT = GetWorld() ? GetWorld()->GetDeltaSeconds() : 0.f;
+
+	ViewActor->ApplyZoomInput(Axis, DT);
+}
+
+void AAuraPlayerController::OnReconExit()
+{
+	UE_LOG(LogTemp, Warning, TEXT("[ReconPC] OnReconMove fired"));
+	
+	AAuraPlayerState* APS = GetPlayerState<AAuraPlayerState>();
+	if (!APS) return;
+
+	if (UOrbitalReconComponent* ReconComp = APS->FindComponentByClass<UOrbitalReconComponent>())
+	{
+		ReconComp->CloseReconView();
+	}
+}
+

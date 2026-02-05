@@ -9,6 +9,8 @@
 class AOrbitalReconActor;
 class APawn;
 class APlayerController;
+class UInputMappingContext;
+class UUserWidget;
 
 USTRUCT(BlueprintType)
 struct FOrbitalReconSnapshot
@@ -50,6 +52,10 @@ public:
 	// 최근 스캔 결과(HUD에서 읽기)
 	UFUNCTION(BlueprintCallable, Category="Recon")
 	const FOrbitalReconSnapshot& GetLastSnapshot() const { return LastSnapshot; }
+	
+
+	AOrbitalReconActor* GetReconViewActor() const;
+	bool IsReconViewOpen() const;
 
 protected:
 	virtual void BeginPlay() override;
@@ -83,6 +89,26 @@ protected:
 
 	UPROPERTY(EditDefaultsOnly, Category="Recon|Filter")
 	bool bExcludePlayerControlledPawns = false;
+	
+	// ===== 비전투 ReconView 입력/UI =====
+
+	// 비전투 ReconView에서만 활성화할 IMC
+	UPROPERTY(EditDefaultsOnly, Category="Recon|Input")
+	TObjectPtr<UInputMappingContext> ReconIMC = nullptr;
+
+	// 비전투 ReconView 오버레이(깡통 위젯)
+	UPROPERTY(EditDefaultsOnly, Category="Recon|UI")
+	TSubclassOf<UUserWidget> ReconOverlayWidgetClass;
+
+	UPROPERTY(Transient)
+	TObjectPtr<UUserWidget> ReconOverlayWidget = nullptr;
+
+	// ViewTarget/커서 복구용
+	UPROPERTY(Transient)
+	TWeakObjectPtr<AActor> PrevViewTarget;
+
+	UPROPERTY(Transient)
+	bool bPrevShowMouseCursor = false;
 
 private:
 	UPROPERTY()
@@ -97,6 +123,7 @@ private:
 	bool PassesFilter(AActor* Actor) const;
 
 	APlayerController* GetOwningPC() const;
+	
 
 		
 };

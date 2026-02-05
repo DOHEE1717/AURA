@@ -58,5 +58,34 @@ protected:
 	// 스캔 영역이 화면 중앙에 오도록 약간 위로 올리는 보정
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Recon|Tuning")
 	float CenterZOffset = 300.f;
+	
+public:
+	// PC 입력 바인딩에서 호출할 함수(골조)
+	void ApplyMoveInput(const FVector2D& MoveAxis, float DeltaSeconds);
+	void ApplyZoomInput(float ZoomAxis, float DeltaSeconds);
+	
+protected:
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Recon|Tuning")
+	float MoveSpeed = 1800.f; // uu/sec
 
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Recon|Tuning")
+	float ZoomSpeed = 2500.f; // arm length/sec
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Recon|Tuning")
+	float MinArmLength = 800.f;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Recon|Tuning")
+	float MaxArmLength = 8000.f;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Recon|Tuning")
+	bool bClampToScanRadius = true;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Recon|Tuning")
+	float ClampMargin = 200.f;
+	
+	UPROPERTY(Transient)
+	float MoveReferenceYaw = 0.f;
+
+public:
+	void SetMoveReferenceYaw(float InYaw);
 };

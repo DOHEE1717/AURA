@@ -134,6 +134,9 @@ void AAuraPlayerController::BeginPlay()
 
 	// 마우스 입력 캡처 관련
 	bShowMouseCursor = false;
+	bEnableClickEvents = false;
+	bEnableMouseOverEvents = false;
+
 
 	FInputModeGameOnly Mode;
 	Mode.SetConsumeCaptureMouseDown(false);

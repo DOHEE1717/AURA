@@ -1,29 +1,35 @@
 // Fill out your copyright notice in the Description page of Project Settings.
 
-
 #include "GameBase/AuraPlayerState.h"
+
 #include "AbilitySystemComponent.h"
+#include "GameBase/AuraAttributeSet.h"
+
 #include "Card/AuraCombatCardComponent.h"
 #include "Card/DA_AuraCardAbilityMapping.h"
 #include "Abilities/GameplayAbility.h"
 #include "Card/CardAbility/OrbitalStrike/OrbitalReconComponent.h"
-
-
-
+#include "Card/CardAbility/PhaseShift/PhaseShiftRecallComponent.h"
 
 AAuraPlayerState::AAuraPlayerState()
 {
-	bReplicates=true;
-	
-	AbilitySystemComponent=CreateDefaultSubobject<UAbilitySystemComponent>(TEXT("AbilitySystemComponent"));
-	
+	bReplicates = true;
+
+	// ASC
+	AbilitySystemComponent = CreateDefaultSubobject<UAbilitySystemComponent>(TEXT("AbilitySystemComponent"));
 	AbilitySystemComponent->SetReplicationMode(EGameplayEffectReplicationMode::Mixed);
-	
-	//CardCombatComponent 추가
-	CombatCardComponent=CreateDefaultSubobject<UAuraCombatCardComponent>(TEXT("CombatCardComponent"));
-	
+
+	// ✅ AttributeSet (이 줄이 핵심)
+	AttributeSet = CreateDefaultSubobject<UAuraAttributeSet>(TEXT("AuraAttributeSet"));
+
+	// Combat Card Component
+	CombatCardComponent = CreateDefaultSubobject<UAuraCombatCardComponent>(TEXT("CombatCardComponent"));
+
+	// Orbital Recon
 	OrbitalReconComp = CreateDefaultSubobject<UOrbitalReconComponent>(TEXT("OrbitalReconComp"));
 	
+	//PhaseShift
+	PhaseShiftRecallComp = CreateDefaultSubobject<UPhaseShiftRecallComponent>(TEXT("PhaseShiftRecallComp"));
 }
 
 UAbilitySystemComponent* AAuraPlayerState::GetAbilitySystemComponent() const
@@ -34,7 +40,7 @@ UAbilitySystemComponent* AAuraPlayerState::GetAbilitySystemComponent() const
 void AAuraPlayerState::BeginPlay()
 {
 	Super::BeginPlay();
-	
+
 	// 1) CombatCardComponent 가져오기
 	UAuraCombatCardComponent* CardComp = GetCombatCardComponent();
 	if (!CardComp)
@@ -43,39 +49,37 @@ void AAuraPlayerState::BeginPlay()
 		return;
 	}
 
-	// 2) 전투 카드 풀 구성(하드코딩
+	// 2) 전투 카드 풀 구성
 	TArray<FName> CombatPool;
 	CombatPool.Add(TEXT("Card_GravityField"));
 	CombatPool.Add(TEXT("Card_HealingDrone"));
-	CombatPool.Add(TEXT("Card_OrbitalStrike"));
 	CombatPool.Add(TEXT("Card_PhaseShift"));
+	CombatPool.Add(TEXT("Card_OrbitalStrike"));
 	CombatPool.Add(TEXT("Card_PlasmaOverload"));
 
 	// 3) 카드 시스템 초기화
 	CardComp->InitializeCombatCards(CombatPool);
 
-	// 4) (중요) 초기화 직후 Ability들 Give
+	// 4) 초기화 직후 Ability 부여
 	GrantCombatCardAbilities();
 }
 
-
 void AAuraPlayerState::GrantCombatCardAbilities()
 {
-	// GAS Ability 부여는 서버 권장
+	// 서버에서만 Ability 부여
 	if (!HasAuthority())
 	{
 		return;
 	}
 
-	// ASC 얻기 (네 프로젝트에서 PS가 ASC 보유한다고 했으니)
-	UAbilitySystemComponent* ASC = FindComponentByClass<UAbilitySystemComponent>();
+	UAbilitySystemComponent* ASC = AbilitySystemComponent;
 	if (!ASC)
 	{
 		UE_LOG(LogTemp, Warning, TEXT("[AuraPS] GrantCombatCardAbilities: ASC is null"));
 		return;
 	}
 
-	UAuraCombatCardComponent* CardComp = GetCombatCardComponent(); // 네가 이미 갖고있는 getter
+	UAuraCombatCardComponent* CardComp = GetCombatCardComponent();
 	if (!CardComp)
 	{
 		UE_LOG(LogTemp, Warning, TEXT("[AuraPS] GrantCombatCardAbilities: CombatCardComponent is null"));
@@ -85,14 +89,16 @@ void AAuraPlayerState::GrantCombatCardAbilities()
 	const UDA_AuraCardAbilityMapping* Mapping = CardComp->GetAbilityMappingAsset();
 	if (!Mapping)
 	{
-		UE_LOG(LogTemp, Warning, TEXT("[AuraPS] GrantCombatCardAbilities: AbilityMappingAsset is null (set DA_CardAbilityMapping_Default on component)"));
+		UE_LOG(LogTemp, Warning,
+			TEXT("[AuraPS] GrantCombatCardAbilities: AbilityMappingAsset is null"));
 		return;
 	}
 
 	const TArray<FName>& Pool = CardComp->GetCombatPoolOrder();
 	if (Pool.Num() == 0)
 	{
-		UE_LOG(LogTemp, Warning, TEXT("[AuraPS] GrantCombatCardAbilities: CombatPoolOrder is empty (InitializeCombatCards not called yet?)"));
+		UE_LOG(LogTemp, Warning,
+			TEXT("[AuraPS] GrantCombatCardAbilities: CombatPoolOrder is empty"));
 		return;
 	}
 
@@ -108,7 +114,6 @@ void AAuraPlayerState::GrantCombatCardAbilities()
 		FCardAbilityPair Pair;
 		if (!Mapping->GetAbilityPair(CardID, Pair))
 		{
-			// 카드풀엔 있는데 매핑이 비어있을 수 있음(일단 스킵)
 			continue;
 		}
 
@@ -116,7 +121,6 @@ void AAuraPlayerState::GrantCombatCardAbilities()
 		{
 			if (!AbilityClass) return;
 
-			// 이미 부여된 경우 중복 방지
 			if (ASC->FindAbilitySpecFromClass(AbilityClass))
 			{
 				return;
@@ -130,5 +134,7 @@ void AAuraPlayerState::GrantCombatCardAbilities()
 		GiveIfNeeded(Pair.AltAbility);
 	}
 
-	UE_LOG(LogTemp, Warning, TEXT("[AuraPS] GrantCombatCardAbilities: Granted=%d (Pool=%d)"), GrantedCount, Pool.Num());
+	UE_LOG(LogTemp, Warning,
+		TEXT("[AuraPS] GrantCombatCardAbilities: Granted=%d (Pool=%d)"),
+		GrantedCount, Pool.Num());
 }

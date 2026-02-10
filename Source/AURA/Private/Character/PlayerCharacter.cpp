@@ -7,10 +7,15 @@
 #include "Components/CapsuleComponent.h"  
 #include "GameFramework/CharacterMovementComponent.h"
 
+#include "AbilitySystemComponent.h"
+#include "GameBase/AuraAttributeSet.h"
+#include "GameFramework/CharacterMovementComponent.h"
+
 //입력관련헤더
 #include "EnhancedInputComponent.h"
 #include "EnhancedInputSubsystems.h"
 #include "InputActionValue.h"
+#include "GameBase/AuraPlayerState.h"
 
 APlayerCharacter::APlayerCharacter()
 {
@@ -48,9 +53,9 @@ APlayerCharacter::APlayerCharacter()
 	FirstPersonArmsMesh->bCastDynamicShadow = false;
 	
 	//컨트롤러 회전사용 
-	bUseControllerRotationPitch=true;
-	bUseControllerRotationYaw=true;
-	bUseControllerRotationRoll=true;
+	bUseControllerRotationYaw = true;
+	bUseControllerRotationPitch = false;
+	bUseControllerRotationRoll = false;
 	
 	//이동시 자동회전 끄기
 	if(UCharacterMovementComponent* MoveComp = GetCharacterMovement())
@@ -62,6 +67,7 @@ APlayerCharacter::APlayerCharacter()
 void APlayerCharacter::BeginPlay()
 {
 	Super::BeginPlay();
+	BindMoveSpeedAttribute();
 	
 	//IMC를 캐릭터에 적용
 	if (APlayerController* PlayerController = Cast<APlayerController>(GetController()))
@@ -90,6 +96,53 @@ void APlayerCharacter::BeginPlay()
 		FirstPersonArmsMesh->SetRelativeLocation(ArmsRelativeLocation);
 		FirstPersonArmsMesh->SetRelativeRotation(ArmsRelativeRotation);
 	}
+}
+
+void APlayerCharacter::PossessedBy(AController* NewController)
+{
+	Super::PossessedBy(NewController);
+	BindMoveSpeedAttribute();
+}
+
+void APlayerCharacter::OnRep_PlayerState()
+{
+	Super::OnRep_PlayerState();
+	BindMoveSpeedAttribute();
+}
+
+void APlayerCharacter::BindMoveSpeedAttribute()
+{
+	if (bMoveSpeedBound)
+		return;
+
+	AAuraPlayerState* PS = GetPlayerState<AAuraPlayerState>();
+	if (!PS)
+		return;
+
+	UAbilitySystemComponent* ASC = PS->GetASC();
+	if (!ASC)
+		return;
+
+	// 변경 델리게이트 바인딩
+	MoveSpeedChangedHandle =
+		ASC->GetGameplayAttributeValueChangeDelegate(UAuraAttributeSet::GetMoveSpeedAttribute())
+		.AddUObject(this, &ThisClass::OnMoveSpeedChanged);
+
+	bMoveSpeedBound = true;
+
+	// 초기값도 즉시 반영 (중요)
+	const float CurrentMoveSpeed = ASC->GetNumericAttribute(UAuraAttributeSet::GetMoveSpeedAttribute());
+	if (UCharacterMovementComponent* MoveComp = GetCharacterMovement())
+	{
+		MoveComp->MaxWalkSpeed = CurrentMoveSpeed;
+	}
+}
+
+void APlayerCharacter::OnMoveSpeedChanged(const FOnAttributeChangeData& Data)
+{if (UCharacterMovementComponent* MoveComp = GetCharacterMovement())
+{
+	MoveComp->MaxWalkSpeed = Data.NewValue;
+}
 }
 
 void APlayerCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputComponent)
@@ -192,10 +245,13 @@ void APlayerCharacter::ExitReconView()
 void APlayerCharacter::InputLook(const FInputActionValue& Value)
 {const FVector2D LookAxis=Value.Get<FVector2D>();
 	
+	
 	//마우스 X는 Yaw 로 
 	AddControllerYawInput(LookAxis.X);
 	//마우스 Y는 Pitch 로
 	AddControllerPitchInput(LookAxis.Y);
+		
+	
 }
 
 void APlayerCharacter::InputMove(const FInputActionValue& Value)

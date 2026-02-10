@@ -4,6 +4,8 @@
 
 #include "CoreMinimal.h"
 #include "Character/BaseCharacter.h"
+#include "AbilitySystemComponent.h"
+#include "GameplayEffectTypes.h"
 #include "PlayerCharacter.generated.h"
 
 class UCameraComponent;
@@ -11,6 +13,7 @@ class USkeletalMeshComponent;
 class UInputMappingContext;
 class UInputAction;
 class UStaticMeshComponent;
+class UAbilitySystemComponent;
 struct FInputActionValue;
 
 UCLASS()
@@ -64,7 +67,18 @@ public:
 	
 protected:
 	virtual void BeginPlay() override;
+	virtual void PossessedBy(AController* NewController) override;
+	virtual void OnRep_PlayerState() override;
 	virtual void SetupPlayerInputComponent(UInputComponent* PlayerInputComponent) override;
+	
+private:
+	void BindMoveSpeedAttribute();
+
+	void OnMoveSpeedChanged(const FOnAttributeChangeData& Data);
+
+private:
+	FDelegateHandle MoveSpeedChangedHandle;
+	bool bMoveSpeedBound = false;
 	
 	
 public:

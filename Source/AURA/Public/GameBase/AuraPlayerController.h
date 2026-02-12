@@ -4,6 +4,7 @@
 #include "GameFramework/PlayerController.h"
 #include "GameplayTagContainer.h"
 #include "GameBase/AuraGameplayTags.h"
+#include "Blueprint/UserWidget.h"
 
 #include "AuraPlayerController.generated.h"
 
@@ -14,7 +15,9 @@
 class UInputMappingContext;
 class UInputAction;
 class UAuraCombatCardComponent;
+class UAuraCombatHUDWidget;
 class UOrbitalReconComponent;
+class UUserWidget;
 class AOrbitalReconActor;
 struct FInputActionValue;
 
@@ -32,6 +35,14 @@ public:
 protected:
 	virtual void BeginPlay() override;
 	virtual void SetupInputComponent() override;
+	
+protected:
+	// BP에서 WBP_Combat 지정
+	UPROPERTY(EditDefaultsOnly, Category="UI|Combat")
+	TSubclassOf<UUserWidget> CombatHUDClass;
+
+	UPROPERTY()
+	TObjectPtr<UAuraCombatHUDWidget> CombatHUDWidget;
 	
 private:
 	//IA들 붙이기

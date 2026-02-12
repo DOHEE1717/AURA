@@ -1,4 +1,4 @@
-// Fill out your copyright notice in the Description page of Project Settings.
+// AuraPlayerState.cpp
 
 #include "GameBase/AuraPlayerState.h"
 
@@ -6,8 +6,8 @@
 #include "GameBase/AuraAttributeSet.h"
 
 #include "Card/AuraCombatCardComponent.h"
-#include "Card/DA_AuraCardAbilityMapping.h"
 #include "Abilities/GameplayAbility.h"
+
 #include "Card/CardAbility/OrbitalStrike/OrbitalReconComponent.h"
 #include "Card/CardAbility/PhaseShift/PhaseShiftRecallComponent.h"
 
@@ -19,7 +19,7 @@ AAuraPlayerState::AAuraPlayerState()
 	AbilitySystemComponent = CreateDefaultSubobject<UAbilitySystemComponent>(TEXT("AbilitySystemComponent"));
 	AbilitySystemComponent->SetReplicationMode(EGameplayEffectReplicationMode::Mixed);
 
-	// ✅ AttributeSet (이 줄이 핵심)
+	// AttributeSet
 	AttributeSet = CreateDefaultSubobject<UAuraAttributeSet>(TEXT("AuraAttributeSet"));
 
 	// Combat Card Component
@@ -27,8 +27,8 @@ AAuraPlayerState::AAuraPlayerState()
 
 	// Orbital Recon
 	OrbitalReconComp = CreateDefaultSubobject<UOrbitalReconComponent>(TEXT("OrbitalReconComp"));
-	
-	//PhaseShift
+
+	// PhaseShift
 	PhaseShiftRecallComp = CreateDefaultSubobject<UPhaseShiftRecallComponent>(TEXT("PhaseShiftRecallComp"));
 }
 
@@ -55,86 +55,26 @@ void AAuraPlayerState::BeginPlay()
 	CombatPool.Add(TEXT("Card_HealingDrone"));
 	CombatPool.Add(TEXT("Card_PhaseShift"));
 	CombatPool.Add(TEXT("Card_OrbitalStrike"));
-	CombatPool.Add(TEXT("Card_PlasmaOverload"));
+	//CombatPool.Add(TEXT("Card_PlasmaOverload"));
 
 	// 3) 카드 시스템 초기화
 	CardComp->InitializeCombatCards(CombatPool);
 
-	// 4) 초기화 직후 Ability 부여
-	GrantCombatCardAbilities();
+	// 4) (A안) Ability Grant는 Mapping 의존 제거를 위해 비활성화
+	//    - 현재 카드 사용(UseSlotCard) 시 TryActivateAbilityByClass를 호출하지만,
+	//      "미리 Grant"가 필요하면 다음 단계에서 Grant 로직을 CombatCardComponent로 이관하거나
+	//      AbilitySet/AbilityMapping 기반으로 다시 구성한다.
+	// GrantCombatCardAbilities();
+
+	UE_LOG(LogTemp, Warning, TEXT("[AuraPS] BeginPlay: CombatPool initialized. (GrantCombatCardAbilities skipped)"));
 }
 
 void AAuraPlayerState::GrantCombatCardAbilities()
 {
-	// 서버에서만 Ability 부여
-	if (!HasAuthority())
-	{
-		return;
-	}
-
-	UAbilitySystemComponent* ASC = AbilitySystemComponent;
-	if (!ASC)
-	{
-		UE_LOG(LogTemp, Warning, TEXT("[AuraPS] GrantCombatCardAbilities: ASC is null"));
-		return;
-	}
-
-	UAuraCombatCardComponent* CardComp = GetCombatCardComponent();
-	if (!CardComp)
-	{
-		UE_LOG(LogTemp, Warning, TEXT("[AuraPS] GrantCombatCardAbilities: CombatCardComponent is null"));
-		return;
-	}
-
-	const UDA_AuraCardAbilityMapping* Mapping = CardComp->GetAbilityMappingAsset();
-	if (!Mapping)
-	{
-		UE_LOG(LogTemp, Warning,
-			TEXT("[AuraPS] GrantCombatCardAbilities: AbilityMappingAsset is null"));
-		return;
-	}
-
-	const TArray<FName>& Pool = CardComp->GetCombatPoolOrder();
-	if (Pool.Num() == 0)
-	{
-		UE_LOG(LogTemp, Warning,
-			TEXT("[AuraPS] GrantCombatCardAbilities: CombatPoolOrder is empty"));
-		return;
-	}
-
-	int32 GrantedCount = 0;
-
-	for (const FName& CardID : Pool)
-	{
-		if (CardID.IsNone())
-		{
-			continue;
-		}
-
-		FCardAbilityPair Pair;
-		if (!Mapping->GetAbilityPair(CardID, Pair))
-		{
-			continue;
-		}
-
-		auto GiveIfNeeded = [&](TSubclassOf<UGameplayAbility> AbilityClass)
-		{
-			if (!AbilityClass) return;
-
-			if (ASC->FindAbilitySpecFromClass(AbilityClass))
-			{
-				return;
-			}
-
-			ASC->GiveAbility(FGameplayAbilitySpec(AbilityClass, 1, INDEX_NONE));
-			GrantedCount++;
-		};
-
-		GiveIfNeeded(Pair.PrimaryAbility);
-		GiveIfNeeded(Pair.AltAbility);
-	}
-
-	UE_LOG(LogTemp, Warning,
-		TEXT("[AuraPS] GrantCombatCardAbilities: Granted=%d (Pool=%d)"),
-		GrantedCount, Pool.Num());
+	// (A안) UAuraCombatCardComponent에서 AbilityMappingAsset 접근자를 제거했으므로
+	// PlayerState에서 직접 Mapping을 읽어 GiveAbility 하던 구조는 중단.
+	// UI/덱/리로드 시스템 마무리 후, 아래 중 하나로 재구성 권장:
+	// 1) CombatCardComponent 내부로 Grant 이관 (MappingAsset 소유자가 Grant까지 수행)
+	// 2) 별도 AbilitySet(DataAsset) 도입 후 PlayerState는 AbilitySet만 Grant
+	UE_LOG(LogTemp, Warning, TEXT("[AuraPS] GrantCombatCardAbilities skipped (Mapping owned by CombatCardComponent)."));
 }

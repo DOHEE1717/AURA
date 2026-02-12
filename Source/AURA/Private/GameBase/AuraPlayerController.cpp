@@ -1,5 +1,3 @@
-// Fill out your copyright notice in the Description page of Project Settings.
-
 #include "GameBase/AuraPlayerController.h"
 
 #include "EnhancedInputComponent.h"
@@ -7,18 +5,22 @@
 #include "InputActionValue.h"
 
 #include "GameFramework/PlayerState.h"
+#include "Blueprint/UserWidget.h" // CreateWidget
 
+#include "UI/AuraCombatHUDWidget.h"
 #include "GameBase/AuraPlayerState.h"
 #include "Card/AuraCombatCardComponent.h"
+
 #include "InputMappingContext.h"
 #include "InputAction.h"
 #include "UObject/ConstructorHelpers.h"
+
 #include "AbilitySystemComponent.h"
 #include "GameplayTagContainer.h"
-#include "Card/CardAbility/OrbitalStrike/OrbitalReconComponent.h"
-#include "Card/CardAbility/OrbitalStrike/OrbitalReconActor.h"
 #include "AbilitySystemInterface.h"
 
+#include "Card/CardAbility/OrbitalStrike/OrbitalReconComponent.h"
+#include "Card/CardAbility/OrbitalStrike/OrbitalReconActor.h"
 
 static UAbilitySystemComponent* GetASC_Preferred(AAuraPlayerController* PC)
 {
@@ -36,7 +38,7 @@ static UAbilitySystemComponent* GetASC_Preferred(AAuraPlayerController* PC)
 		}
 	}
 
-	// 2) Pawn/Character ASC (Ability가 여기 붙는 경우 많음)
+	// 2) Pawn/Character ASC
 	if (APawn* P = PC->GetPawn())
 	{
 		if (IAbilitySystemInterface* ASI = Cast<IAbilitySystemInterface>(P))
@@ -90,7 +92,7 @@ AAuraPlayerController::AAuraPlayerController()
 	{
 		IA_CardSelect = IA_Select_Finder.Object;
 	}
-	
+
 	// IMC_Recon
 	static ConstructorHelpers::FObjectFinder<UInputMappingContext> IMC_Recon_Finder(
 		TEXT("/Game/_BP/Input/Recon/IMC_Recon.IMC_Recon")
@@ -126,6 +128,22 @@ AAuraPlayerController::AAuraPlayerController()
 	{
 		IA_ReconExit = IA_ReconExit_Finder.Object;
 	}
+	
+	// ===== Combat HUD (Hard Reference) =====
+	static ConstructorHelpers::FClassFinder<UUserWidget> CombatHUDClassFinder(
+		TEXT("/Game/_BP/UI/WBP_Combat")
+	);
+
+	if (CombatHUDClassFinder.Succeeded())
+	{
+		CombatHUDClass = CombatHUDClassFinder.Class;
+		UE_LOG(LogTemp, Warning, TEXT("[HUD] Hard Loaded CombatHUDClass = %s"), *GetNameSafe(CombatHUDClass));
+	}
+	else
+	{
+		UE_LOG(LogTemp, Warning, TEXT("[HUD] CombatHUDClass is NULL. Hard load failed or asset path is wrong."));
+	}
+	
 }
 
 void AAuraPlayerController::BeginPlay()
@@ -136,7 +154,6 @@ void AAuraPlayerController::BeginPlay()
 	bShowMouseCursor = false;
 	bEnableClickEvents = false;
 	bEnableMouseOverEvents = false;
-
 
 	FInputModeGameOnly Mode;
 	Mode.SetConsumeCaptureMouseDown(false);
@@ -156,6 +173,66 @@ void AAuraPlayerController::BeginPlay()
 	}
 
 	UE_LOG(LogTemp, Warning, TEXT("[AuraPC] BeginPlay OK"));
+
+	// =====================================================================
+	// ✅ (추가) Combat HUD 생성 + CombatCardComponent 바인딩
+	// =====================================================================
+	if (!IsLocalController())
+	{
+		return;
+	}
+
+	if (!CombatHUDClass)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("[HUD] CombatHUDClass is NULL. BP_AuraPlayerController에서 WBP_Combat 지정 필요."));
+		return;
+	}
+
+	CombatHUDWidget = CreateWidget<UAuraCombatHUDWidget>(this, CombatHUDClass);
+	if (!CombatHUDWidget)
+	{
+		UE_LOG(LogTemp, Error, TEXT("[HUD] CreateWidget failed. CombatHUDClass=%s"), *GetNameSafe(CombatHUDClass));
+		return;
+	}
+
+	CombatHUDWidget->AddToViewport(0);
+
+	UE_LOG(LogTemp, Warning, TEXT("[HUD] Created Widget Class=%s | Super=%s"),
+		*CombatHUDWidget->GetClass()->GetName(),
+		*GetNameSafe(CombatHUDWidget->GetClass()->GetSuperClass()));
+
+	AAuraPlayerState* APS = GetPlayerState<AAuraPlayerState>();
+	if (!APS)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("[HUD] PlayerState is NULL at BeginPlay."));
+		return;
+	}
+
+	UAuraCombatCardComponent* CardComp = APS->GetCombatCardComponent();
+	if (!CardComp)
+	{
+		// 혹시 GetCombatCardComponent()가 없거나 반환이 null이면 Find로도 한 번 더 시도
+		CardComp = APS->FindComponentByClass<UAuraCombatCardComponent>();
+	}
+
+	if (!CardComp)
+	{
+		UE_LOG(LogTemp, Error, TEXT("[HUD] UAuraCombatCardComponent not found on PlayerState=%s"), *APS->GetName());
+		return;
+	}
+
+	CombatHUDWidget->BindCombatComponent(CardComp);
+	CombatHUDWidget->SetSelectedSlotIndex(SelectedIndex);
+
+	UE_LOG(LogTemp, Warning, TEXT("[HUD] BindCombatComponent OK."));
+
+	// 위젯 트리에 실제로 존재하는지(= BindWidget 이름 불일치 원인 확정용)
+	UE_LOG(LogTemp, Warning, TEXT("[HUD] WidgetFromName Slot1=%s Slot2=%s Slot3=%s ReproList=%s"),
+		CombatHUDWidget->GetWidgetFromName(TEXT("TXT_Slot1_CardID")) ? TEXT("FOUND") : TEXT("NOT_FOUND"),
+		CombatHUDWidget->GetWidgetFromName(TEXT("TXT_Slot2_CardID")) ? TEXT("FOUND") : TEXT("NOT_FOUND"),
+		CombatHUDWidget->GetWidgetFromName(TEXT("TXT_Slot3_CardID")) ? TEXT("FOUND") : TEXT("NOT_FOUND"),
+		CombatHUDWidget->GetWidgetFromName(TEXT("SB_ReproList")) ? TEXT("FOUND") : TEXT("NOT_FOUND"));
+	// =====================================================================
 }
 
 void AAuraPlayerController::SetupInputComponent()
@@ -184,7 +261,7 @@ void AAuraPlayerController::SetupInputComponent()
 	{
 		EIC->BindAction(IA_CardSelect, ETriggerEvent::Triggered, this, &ThisClass::OnCardSelect);
 	}
-	
+
 	// ===== Recon Bindings =====
 	if (IA_ReconMove)
 	{
@@ -208,7 +285,7 @@ void AAuraPlayerController::OnCardLMB()
 	{
 		return;
 	}
-	
+
 	UAbilitySystemComponent* ASC = GetASC_Preferred(this);
 
 	UE_LOG(LogTemp, Warning,
@@ -235,7 +312,7 @@ void AAuraPlayerController::OnCardRMB()
 	{
 		return;
 	}
-	
+
 	UAbilitySystemComponent* ASC = GetASC_Preferred(this);
 
 	UE_LOG(LogTemp, Warning,
@@ -263,7 +340,7 @@ void AAuraPlayerController::OnCardSelect(const FInputActionValue& Value)
 	{
 		return;
 	}
-	
+
 	const float AxisValue = Value.Get<float>();
 	const float Sign = FMath::Sign(AxisValue);
 
@@ -277,6 +354,11 @@ void AAuraPlayerController::OnCardSelect(const FInputActionValue& Value)
 	else if (Sign < 0.f)
 	{
 		SelectPrev();
+	}
+	
+	if (CombatHUDWidget)
+	{
+		CombatHUDWidget->SetSelectedSlotIndex(SelectedIndex);
 	}
 
 	UE_LOG(LogTemp, Warning, TEXT("[CardInput] Wheel Axis=%.3f | SelectedIndex=%d"), AxisValue, SelectedIndex);
@@ -350,7 +432,7 @@ void AAuraPlayerController::OnReconMove(const FInputActionValue& Value)
 	const FVector2D Axis = Value.Get<FVector2D>();
 	const float DT = GetWorld() ? GetWorld()->GetDeltaSeconds() : 0.f;
 
-	ViewActor->ApplyMoveInput(Axis, DT);	
+	ViewActor->ApplyMoveInput(Axis, DT);
 }
 
 void AAuraPlayerController::OnReconZoom(const FInputActionValue& Value)
@@ -375,7 +457,7 @@ void AAuraPlayerController::OnReconZoom(const FInputActionValue& Value)
 void AAuraPlayerController::OnReconExit()
 {
 	UE_LOG(LogTemp, Warning, TEXT("[ReconPC] OnReconMove fired"));
-	
+
 	AAuraPlayerState* APS = GetPlayerState<AAuraPlayerState>();
 	if (!APS) return;
 
@@ -384,4 +466,3 @@ void AAuraPlayerController::OnReconExit()
 		ReconComp->CloseReconView();
 	}
 }
-

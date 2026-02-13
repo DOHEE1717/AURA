@@ -149,6 +149,14 @@ AAuraPlayerController::AAuraPlayerController()
 void AAuraPlayerController::BeginPlay()
 {
 	Super::BeginPlay();
+	
+	UE_LOG(LogTemp, Error, TEXT("GI Class = %s"),
+	*GetGameInstance()->GetClass()->GetName());
+	
+	UGameInstance* GI = GetGameInstance();
+	UE_LOG(LogTemp, Error, TEXT("GI Class=%s | Super=%s"),
+		*GetNameSafe(GI ? GI->GetClass() : nullptr),
+		*GetNameSafe(GI ? GI->GetClass()->GetSuperClass() : nullptr));
 
 	// 마우스 입력 캡처 관련
 	bShowMouseCursor = false;

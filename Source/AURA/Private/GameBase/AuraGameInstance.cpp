@@ -6,6 +6,20 @@
 void UAuraGameInstance::Init()
 {
 	Super::Init();
+	
+	
+	UE_LOG(LogTemp, Warning, TEXT("[GI] BuildCardRegistry DONE. Count=%d"), CardRegistry.Num());
+	
+}
+
+void UAuraGameInstance::OnStart()
+{
+	Super::OnStart();
+
+	UE_LOG(LogTemp, Warning, TEXT("[GI] OnStart() called. Class=%s"), *GetNameSafe(GetClass()));
+
+	BuildCardRegistry();
+	UE_LOG(LogTemp, Warning, TEXT("[GI] OnStart() BuildCardRegistry DONE. Count=%d"), CardRegistry.Num());
 }
 
 void UAuraGameInstance::BuildCardRegistry()

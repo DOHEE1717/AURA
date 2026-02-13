@@ -21,6 +21,7 @@ class AURA_API UAuraGameInstance : public UGameInstance
 	
 public:
 	virtual  void Init() override;
+	virtual void OnStart() override; 
 	
 	UFUNCTION(BlueprintCallable, Category="Card")
 	void BuildCardRegistry();

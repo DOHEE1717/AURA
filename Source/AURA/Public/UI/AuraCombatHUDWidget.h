@@ -1,3 +1,4 @@
+
 #pragma once
 
 #include "CoreMinimal.h"
@@ -5,9 +6,11 @@
 #include "UI/AuraCombatHUDTypes.h"
 #include "AuraCombatHUDWidget.generated.h"
 
-class UTextBlock;
-// class UScrollBox;
 class UAuraCombatCardComponent;
+class UBorder;
+class USizeBox;
+class UCanvasPanel;
+class UAuraCombatCardSlotWidget;
 
 UCLASS()
 class AURA_API UAuraCombatHUDWidget : public UUserWidget
@@ -15,33 +18,35 @@ class AURA_API UAuraCombatHUDWidget : public UUserWidget
 	GENERATED_BODY()
 
 public:
-	// PlayerController에서 CombatCardComponent 연결
 	UFUNCTION(BlueprintCallable)
 	void BindCombatComponent(UAuraCombatCardComponent* InComponent);
 
 protected:
-	/* ===== Slot Text ===== */
-	UPROPERTY(meta=(BindWidget)) UTextBlock* TXT_Slot1_CardID;
-	UPROPERTY(meta=(BindWidget)) UTextBlock* TXT_Slot2_CardID;
-	UPROPERTY(meta=(BindWidget)) UTextBlock* TXT_Slot3_CardID;
+	virtual void NativeConstruct() override;
 
-	// /* ===== Reproduction List ===== */
-	// UPROPERTY(meta=(BindWidget)) UScrollBox* SB_ReproList;
+	/* ===== Slot Borders (WBP 이름과 동일해야 함) ===== */
+	//사이즈 박스로 수정
+    UPROPERTY(meta=(BindWidget)) USizeBox* Slot_1;
+    UPROPERTY(meta=(BindWidget)) USizeBox* Slot_2;
+    UPROPERTY(meta=(BindWidget)) USizeBox* Slot_3;
 
-protected:
+	UPROPERTY(meta=(BindWidget))
+	UCanvasPanel* CP_Slots;
+
+	/* ===== Runtime Cached Slot Widgets ===== */
+	UPROPERTY(Transient)
+	TArray<TObjectPtr<UAuraCombatCardSlotWidget>> SlotWidgets;
+
 	/* ===== Delegate Callbacks ===== */
 	UFUNCTION()
 	void OnSlotsChanged(const TArray<FCombatSlotUIData>& Slots);
 
 	UFUNCTION()
 	void OnReprosChanged(const TArray<FCombatReproUIData>& Repros);
-	
+
 public:
 	UFUNCTION(BlueprintCallable, Category="Aura|CombatHUD")
 	void SetSelectedSlotIndex(int32 InIndex);
-
-	// UFUNCTION()
-	// void OnNextChanged(FName NextCardID);
 
 protected:
 	UPROPERTY()

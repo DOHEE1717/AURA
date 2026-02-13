@@ -28,8 +28,7 @@ UAuraCombatCardComponent::UAuraCombatCardComponent()
 void UAuraCombatCardComponent::BeginPlay()
 {
 	Super::BeginPlay();
-	BroadcastUI_All();
-
+	
 	// 디버그
 	FString SlotsStr;
 	for (int32 i = 0; i < Slots.Num(); ++i)
